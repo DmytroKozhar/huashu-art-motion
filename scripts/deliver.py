@@ -88,7 +88,7 @@ def qa_facts(qa_dir, spec):
     L = [f"- 跑过：`{f}`（写于 {stamp(f)}）",
          f"- 页面报错 {len(errs)} 条" + ("（qa 判失败）" if errs else ""),
          f"- 确定性：{det}/{len(segs)} 段逐像素一致",
-         f"- 跳变 {spikes} 处" + (f"；另有镜头事件 {cams} 个（短于 0.35 秒的单调推拉/横移，不算跳变）" if "camera_events_lt" in (segs[0] if segs else {}) else ""),
+         f"- 跳变 {spikes} 处" + (f"；另有镜头事件 {cams} 个（2 秒以内单调、平滑的推拉/横移，不算跳变）" if "camera_events_lt" in (segs[0] if segs else {}) else ""),
          f"- 框景线索 {framing} 条（半截字、叠字、进字幕带、近空白；是「去看这一帧」，不是错误）"]
     for s in segs:
         L.append(f"  - {s.get('id')}：运动 {s.get('motion_pct')}%，静止帧对 {s.get('still_pairs_pct')}%，"

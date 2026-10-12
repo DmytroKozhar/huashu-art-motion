@@ -61,7 +61,7 @@ class BulletWall(unittest.TestCase):
         red = tags(self.res, SL.RED)
         for t in ("①物", "②做什么", "③屏上字", "④开头", "⑤文字占比", "⑥时长", "做法"):
             self.assertIn(t, red, "\n".join(SL.report(self.res)))
-        self.assertIn("⑦镜头", tags(self.res, SL.YELLOW))
+        self.assertIn("镜头", tags(self.res, SL.YELLOW))   # 全是「停」：⑦不报（停可以连着），整表报「没有任何镜头动作」
 
     def test_points_appearing_is_not_an_action(self):
         r = self.res["rows"][1]
@@ -278,3 +278,32 @@ class StyleLock(unittest.TestCase):
                 "| 6–9 | 杯子 | 摔成两半 | 砸入 | | t3 片段 c.json |"]
         self.assertTrue(any(t == "做法" and "3 种片段语法" in w for t, w in self.red(self.lint(self.LOCK, rows))))
         self.assertFalse(any(t == "做法" for t, _ in self.red(self.lint(self.LOCK, rows[:2]))))
+
+
+class CameraRhythm(unittest.TestCase):
+    """镜头列：推进去要有来有回、重音要少、「停」可以连着（2026-10-12 诺奖短片 102 秒推近约 48 次之后加）。"""
+    HEAD = Rules.HEAD
+    OBJ = ["一只猫 | 跳上桌子", "那只猫 | 打翻杯子", "杯子 | 摔成两半", "碎片 | 弹到地上", "猫爪 | 拨开碎片", "地板 | 映出猫影"]
+
+    def lint(self, cams):
+        rows = [f"| {3 * i}–{3 * i + 3} | {self.OBJ[i % 6]} | {c} | | scenes/a.js |" for i, c in enumerate(cams)]
+        return SL.lint(self.HEAD + "\n".join(rows) + "\n")
+
+    def issues(self, res):
+        return {t for r in res["rows"] for _, t, *_ in r["issues"]} | {t for _, t, *_ in res["table"]}
+
+    def test_three_inward_in_a_row(self):
+        self.assertIn("⑮推近", self.issues(self.lint(["缓推", "快推", "砸入", "停", "拉远", "横移"])))
+        self.assertNotIn("⑮推近", self.issues(self.lint(["缓推", "拉远", "快推", "停", "缓推", "横移"])))
+
+    def test_too_many_accents(self):
+        self.assertIn("⑯重音", self.issues(self.lint(["快推", "停", "砸入", "横移", "快推", "拉远"])))
+        self.assertNotIn("⑯重音", self.issues(self.lint(["缓推", "停", "砸入", "横移", "快推", "拉远"])))
+
+    def test_holds_can_repeat(self):
+        self.assertNotIn("⑦镜头", self.issues(self.lint(["停", "停", "停", "缓推", "拉远", "横移"])))
+        self.assertIn("⑦镜头", self.issues(self.lint(["快推", "快推", "快推", "横移", "拉远", "停"])))
+        self.assertNotIn("⑦镜头", self.issues(self.lint(["横移", "横移", "横移", "缓推", "拉远", "停"])))   # 调查桌一件件横移
+
+    def test_inward_synonyms(self):
+        self.assertIn("⑮推近", self.issues(self.lint(["慢推", "推进", "zoom in", "停", "拉远", "横移"])))

@@ -44,32 +44,38 @@ CAM.at = (keys, t) => {
   return { ...keys[keys.length - 1] };
 };
 
-// ---------- 脉冲镜头（解说片默认用它，不用匀速慢推） ----------
-// 节奏：停住 → 快推 / 横移 / 砸入 → 停住；停多久按口播。时长在 MO.PULSE（快推 0.28s、横移 0.30s、砸入 0.17s）。
+// ---------- 镜头动作表（解说片用它；什么时候用哪一种见 references/镜头语言.md） ----------
+// 默认是过渡类动作：缓推 push、找下一件 glide、拉远 pull（0.6–1.5s，sineInOut / 长尾）；重音类：快推 punch、快移 pan、砸入 slam，
+// 留给揭晓、数字、反转。时长在 MO.PULSE。一支片子里推近要有来有回：推进去之后用 pull、glide 或硬切换开，别一镜接一镜只往里推。
 // CAM.track(base, events, t) → cam：base 是起始相机 {x, y, z}；events 是按时间排的镜头动作，相机只由 t 算出来（确定性，可跳帧）。
 // 每个动作从「上一个动作结束时的相机」出发，到 at + dur 落定；两个动作挨太近（上一个没走完下一个就开始）时，下一个从上一个此刻的位置接着走。
-//   {at, kind: 'punch', k?, x?, y?, dur?}   快推：z 乘以 (1+k)（k 默认 0.25；横竖屏都写 0.18–0.32）；给 x, y 就同时把这个世界点移到画面中心，
-//                                            不给就绕当前画面中心推。k 可以写负数（快拉，回到上一档）。
-//   {at, kind: 'pan', x, y, dur?}            同倍率横移：缩放不变，画面中心移到世界点 (x, y)。同一面「墙」上从一件证据移到下一件。
-//   {at, kind: 'to', x?, y?, z?, dur?, ease?} 推到指定相机（推近截图上的一块：z 用 MD.zoomFor 算）；dur 默认 0.28。
-//   {at, kind: 'slam', dur?, from?}          整帧砸入：z 额外乘 MO.slamK（1.55→0.94→1.0，0.17s）。镜头切到新画面那一帧用。
+//   {at, kind: 'push', k?, x?, y?, dur?}    缓推（不写 kind 就是它）：z 乘以 (1+k)（k 默认 0.2），0.9s sineInOut；给 x, y 就同时把这个世界点移到画面中心。
+//   {at, kind: 'pull', k?, x?, y?, z?, dur?} 拉远：z 乘以 (1+k)（k 默认 -1/6，正好抵消一次默认缓推；回全貌最稳是写 z: base.z），1.1s 长尾。推进去之后回到全貌、段落收束用它。
+//   {at, kind: 'glide', x, y, dur?}         找下一件：缩放不变，画面中心平滑移到世界点 (x, y)，0.7s sineInOut。同一面墙上从一件移到下一件。
+//   {at, kind: 'to', x?, y?, z?, dur?, ease?} 推到指定相机（推近截图上的一块：z 用 MD.zoomFor 算）；默认 0.9s sineInOut，写 dur: MO.PULSE.punch 就是重音。
+//   {at, kind: 'punch', k?, x?, y?, dur?}   快推（重音）：0.28s cubicInOut，k 默认 0.25（0.18–0.32）。k 可以写负数（快拉）。
+//   {at, kind: 'pan', x, y, dur?}            快移（重音）：同倍率 0.30s。视线突然转移、喜剧节奏用。
+//   {at, kind: 'slam', dur?, from?}          整帧砸入：z 额外乘 MO.slamK（1.55→0.94→1.0，0.17s）。大字、数字、盖章落下那一帧用。
 //   {at, kind: 'shake', amp?, dur?}          震镜：dur（默认 4 帧 ≈ 0.13s）内上下抖 amp 像素（默认 14），和砸入、盖章同帧用，一支片子别超过两次。
-//   {at, kind: 'cut', x?, y?, z?}            硬切到这台相机（不过渡）。
+//   {at, kind: 'cut', x?, y?, z?}            硬切到这台相机（不过渡）。换景别不一定要运镜，跳近一档就是硬切。
 // 返回的 cam 带 moving: true/false（这一刻是否在运动），给运动模糊、标签显隐用。
 CAM.track = (base, events, t) => {
   let cam = { x: base.x ?? W / 2, y: base.y ?? H / 2, z: base.z ?? 1 }, zMul = 1, dy = 0, moving = false;
   const evs = [...events].sort((a, b) => a.at - b.at);
   for (const e of evs) {
     if (t < e.at) break;
-    const P = MO.PULSE, kind = e.kind || 'punch';
+    const P = MO.PULSE, kind = e.kind || 'push';
     if (kind === 'cut') { cam = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: e.z ?? cam.z }; continue; }
     if (kind === 'slam') { const d = e.dur || P.slam, k = (t - e.at) / d; if (k < 1) { zMul *= MO.slamK(k, e.from); moving = true; } continue; }
     if (kind === 'shake') { const d = e.dur || 4 / 30, k = (t - e.at) / d; if (k < 1) { dy += (e.amp ?? 14) * Math.sin(k * Math.PI * 4) * (1 - k) / cam.z; moving = true; } continue; }
-    const d = e.dur || (kind === 'pan' ? P.pan : P.punch), p = (e.ease || MO.cubicInOut)(clamp((t - e.at) / d));
+    const D = { pan: P.pan, punch: P.punch, glide: P.glide, pull: P.pull, push: P.push, to: P.push }[kind] ?? P.push;
+    const E = kind === 'punch' || kind === 'pan' || (e.dur && e.dur <= 0.35) ? MO.cubicInOut : kind === 'pull' ? MO.longTail : MO.sineInOut;   // 写了重音时长的 to 也用快推的曲线
+    const d = e.dur || D, p = (e.ease || E)(clamp((t - e.at) / d));
     let to;
-    if (kind === 'pan') to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: cam.z };
+    if (kind === 'pan' || kind === 'glide') to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: cam.z };
     else if (kind === 'to') to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: e.z ?? cam.z };
-    else to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: cam.z * (1 + (e.k ?? P.k)) };
+    else if (kind === 'pull') to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: e.z ?? cam.z * (1 + (e.k ?? -1 / 6)) };   // 默认 ×5/6，正好抵消一次默认缓推（×1.2）
+    else to = { x: e.x ?? cam.x, y: e.y ?? cam.y, z: cam.z * (1 + (e.k ?? (kind === 'push' ? 0.2 : P.k))) };
     if (p < 1) moving = true;
     cam = { x: lerp(cam.x, to.x, p), y: lerp(cam.y, to.y, p), z: CAM.zlerp(cam.z, to.z, p) };
   }

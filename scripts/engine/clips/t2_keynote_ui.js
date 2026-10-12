@@ -1,15 +1,17 @@
-// 片段 · 发布会式界面（t2），做教程、功能、参数最顺手：一屏一件事。有截图就让截图当主画面：满幅铺开，口播点到哪块就快推到哪块。
+// 片段 · 发布会式界面（t2），做教程、功能、参数最顺手：一屏一件事。有截图就让截图当主画面：满幅铺开，口播点到要看的那块就推过去。
+// 镜头：spec 级 data.camera 'smooth'（默认，缓推 0.9s、换块 0.7s、拉回 0.6s，sineInOut）| 'snap'（重音：快推 0.28s、横移 0.30s、进屏轻砸）。
+//   一支片里 snap 只给需要重音的那几段，见 references/镜头语言.md。
 // data: { eyebrow?（标题上方小字）, title?, subtitle?, accent?:'#3d6bff', frame?: 'full'（默认）| 'glass' }
 // cues：title（at 这一帧标题开始从模糊里浮出；text/sub 覆盖 data）
 //       card | step | image（一张卡：text 卡标题，sub 说明，image 截图路径（或 frames 录屏帧序列）；at 这一帧出现；步骤号按出现顺序 01、02…，data.step 可指定）
 //         · 有 image，默认 frame 'full'：截图满幅（等比放进内容框、不裁；data.fit:'cover' 才按焦点 data.focus=[fx,fy] 裁满），
 //           四周垫一层同图的压暗模糊放大版，不留死背景；text / sub 是左下角的黑底撕边标签（12fps 打字）。at 这一帧硬切进来（0.17s 轻砸），
-//           上一屏也是满幅截图时改成同倍率横移 0.30s 换过去。highlight 这一刻快推 0.28s 到那块（推到框占画面约 42%，至少推近 18%、最多 2.6 倍），连着的 highlight 横移过去。
+//           上一屏也是满幅截图时改成同倍率横移换过去。highlight 这一刻推到那块（推到框占画面约 42%，至少推近 18%、最多 2.6 倍），连着的 highlight 移过去；时长按 data.camera。
 //         · data.frame:'glass'（或 spec 级 data.frame）：旧版毛玻璃卡——截图等比放进卡里，横图横卡；竖图在横屏里是「左字右图」。光斑、玻璃是可选包装，慎用
 //         · 没有 image：功能卡。连着的几张（最多 3 张）并排站在一屏里，新卡进来时旧卡让位（像示范片的三卡并列）；
 //           卡上有图标（data.icon：wave memory agent clock phone layers chart code check play bolt lock，不写就画步骤号）、
 //           大标题、说明，可选一个大数字（data.value / prefix / suffix / decimals ＋ data.label，卡片落定后计数）
-//       highlight（框出当前截图里的一块：data.rect = [x, y, w, h]，相对截图的 0..1；text 可选标签；满幅模式下镜头同时快推过去，data.fill 改推近后框占画面的比例）
+//       highlight（框出当前截图里的一块：data.rect = [x, y, w, h]，相对截图的 0..1；text 可选标签；满幅模式下镜头同时推过去，data.fill 改推近后框占画面的比例）
 //       number（大数字单独一屏：data {value, prefix, suffix, decimals, label?（数字上方小字）}；at = 数字落定时刻，提前 0.9s 开始计数，
 //               上一屏这时开始退场，不叠在卡片上；说明写 text 或 sub 都认）
 //               · data.over: true 且上一屏是满幅截图：不另起一屏，留在截图的世界里——镜头拉回整张截图，截图压暗，数字砸在它上面计数，
@@ -79,7 +81,9 @@ return {
       }
     }
     slides.forEach((s, i) => { s.next = slides[i + 1] ? slides[i + 1].start : 1e9; s.panIn = s.full && i > 0 && slides[i - 1].full; s.panOut = s.full && !!slides[i + 1] && slides[i + 1].full; });
-    // 满幅截图：内容框（让开 safe，四边留一点）、截图的几何、这一屏的脉冲镜头（highlight 快推 / 横移）
+    // 满幅截图：内容框（让开 safe，四边留一点）、截图的几何、这一屏的镜头（highlight 推近 / 换块；snap 用重音时长）
+    const snap = (ctx.data && ctx.data.camera) === 'snap', MV = snap ? { in: MO.PULSE.punch, next: MO.PULSE.pan, back: MO.PULSE.punch, ease: MO.cubicInOut } : { in: MO.PULSE.push, next: MO.PULSE.glide, back: 0.6, ease: MO.sineInOut };
+    slides.forEach(s => { s.snap = snap; s.panDur = snap ? MO.PULSE.pan : MO.PULSE.glide; });
     for (const s of slides) if (s.full) {
       const cd = s.cards[0], q = cd.q, m = 24 * u, bx = { x: ctx.box.x + m, y: ctx.box.y + m, w: ctx.box.w - 2 * m, h: ctx.box.h - 2 * m };
       const fit = (q.data && q.data.fit) === 'cover' ? 'cover' : 'contain', fo = (q.data && q.data.focus) || [0.5, 0.5];
@@ -92,12 +96,12 @@ return {
         if (qh.at < s.start || qh.at >= s.next || !qh.data || !qh.data.rect) continue;
         const R = CLIP.sub(qh.data.rect, s.f), fill = qh.data.fill || 0.42, z = clamp(Math.min(bx.w * fill / R.w, bx.h * fill / R.h), 1.18, 2.6);   // 下限 18%；框太小时最多推到 2.6 倍
         const tx = R.x + R.w / 2 - (bcx - W / 2) / z, ty = R.y + R.h / 2 - (bcy - H / 2) / z;   // 框中心落到内容框中心（让开 safe）
-        s.events.push({ at: qh.at, kind: 'to', x: tx, y: ty, z, dur: zoomed ? MO.PULSE.pan : MO.PULSE.punch });
+        s.events.push({ at: qh.at, kind: 'to', x: tx, y: ty, z, dur: Math.min(zoomed ? MV.next : MV.in, Math.max(MO.PULSE.punch, s.next - qh.at - 0.05)), ease: MV.ease });   // 离下一屏太近就推快一点，别被硬切砍在半路
         zoomed = true;
       }
-      for (const qn of s.nums || []) {                                       // 推近过就先拉回整张截图（0.28s），拉到位数字再砸下来
-        qn.t1 = qn.at - 0.9 + (zoomed ? MO.PULSE.punch : 0);
-        if (zoomed) s.events.push({ at: qn.at - 0.9, kind: 'to', ...s.base, dur: MO.PULSE.punch });
+      for (const qn of s.nums || []) {                                       // 推近过就先拉回整张截图，拉到位数字再砸下来
+        qn.t1 = qn.at - 0.9 + (zoomed ? MV.back : 0);
+        if (zoomed) s.events.push({ at: qn.at - 0.9, kind: 'to', ...s.base, dur: MV.back, ease: MV.ease });
       }
     }
     // 截图卡的版式：标题行 ＋ 截图区；截图区按截图比例定。竖图在横屏里改成「左字右图」
@@ -118,7 +122,7 @@ return {
     const { W, H, u, data: d } = ctx, acc = d.accent || T.accent;
     // ---- 底：光斑（只依赖片段时间，连续） ----
     let bd = null;
-    const covered = slides.some(s => s.full && t >= s.start + (s.panIn ? MO.PULSE.pan : 0) - 1e-6 && t < s.next - 1e-6);   // 满幅截图整屏盖住时不画光斑底（省 2/3 的渲染时间）
+    const covered = slides.some(s => s.full && t >= s.start + (s.panIn ? s.panDur || MO.PULSE.pan : 0) - 1e-6 && t < s.next - 1e-6);   // 满幅截图整屏盖住时不画光斑底（省 2/3 的渲染时间）
     if (!ctx.alpha && !covered && T.pal) {                              // 全片色板：平涂底＋极轻暗角
       c.drawImage(PAINT.cached('clip_t2flat_' + T.pal.bg + W + 'x' + H, W, H, g => { g.fillStyle = T.pal.bg; g.fillRect(0, 0, W, H);
         const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.7); vg.addColorStop(0, `rgba(${T.vig},0)`); vg.addColorStop(1, `rgba(${T.vig},0.08)`); g.fillStyle = vg; g.fillRect(0, 0, W, H); }), 0, 0);
@@ -155,7 +159,7 @@ return {
     // ---- 每一屏：下一屏开始时往左后方退走（0.65s），不和下一屏的内容叠着 ----
     slides.forEach((s, si) => {
       if (t < s.start - 1e-6) return;
-      const nx = slides[si + 1], leave = MO.appleOut(MO.seg(t, s.next - 0.15, s.next + (nx && nx.type === 'num' ? 0.3 : 0.5))); if (leave >= 1) return;
+      const nx = slides[si + 1], leave = MO.appleOut(MO.seg(t, s.next - 0.15, s.next + (nx && nx.type === 'num' ? 0.3 : Math.max(0.5, s.panOut ? s.panDur || 0 : 0)))); if (leave >= 1) return;   // 满幅横移出场要等横移走完
       if (s.full) return drawFull(c, s, t, ctx, acc);
       if (s.type === 'num') return drawNumber(c, s, t, leave, ctx, shadowText);
       if (s.type === 'img') return drawCard(c, s.cards[0], 0, t, leave, ctx, bd, cardGeoImg(s.cards[0], ctx), 'i' + si);
@@ -169,17 +173,18 @@ return {
   },
 };
 // 满幅截图一屏：底是同图的压暗模糊放大版（缓存一次），截图等比铺满内容框，镜头按 s.events 脉冲；左上角黑底撕边标签。
-// 进场：上一屏也是满幅截图 → 同倍率横移 0.30s（at 这一帧露出第一条边）；否则硬切＋0.17s 轻砸。离场：下一屏是满幅截图就让它横移盖过来，否则在下一屏开始时硬切掉
+// 进场：上一屏也是满幅截图 → 同倍率横移（默认 0.7s，snap 0.30s；at 这一帧露出第一条边）；否则硬切（snap 加 0.17s 轻砸）。离场：下一屏是满幅截图就让它横移盖过来，否则在下一屏开始时硬切掉
 function drawFull(c, s, t, ctx, acc) {
   const { W, H, u } = ctx, cd = s.cards[0], q = cd.q;
   if (t < s.start - 1e-6) return;
   const nx = slides[slides.indexOf(s) + 1], P = MO.PULSE;
-  if (nx && t >= s.next + (s.panOut ? P.pan : 0) - 1e-6) return;
-  const panIn = s.panIn ? MO.pulse(ctx.lt(t, s.start), 0, P.pan) : 1, panOut = s.panOut ? MO.pulse(ctx.lt(t, s.next), 0, P.pan) : 0;
+  if (nx && t >= s.next + (s.panOut ? s.panDur || P.pan : 0) - 1e-6) return;
+  const pd = s.panDur || P.pan, pe = s.snap ? MO.cubicInOut : MO.sineInOut;
+  const panIn = s.panIn ? MO.pulse(ctx.lt(t, s.start), 0, pd, pe) : 1, panOut = s.panOut ? MO.pulse(ctx.lt(t, s.next), 0, pd, pe) : 0;
   const dx = (1 - panIn) * W - panOut * W;
-  const slam = s.panIn ? 1 : MO.slamK(ctx.lt(t, s.start) / P.slam, 1.06, 0.985);
+  const slam = s.panIn || !s.snap ? 1 : MO.slamK(ctx.lt(t, s.start) / P.slam, 1.06, 0.985);   // 进屏轻砸只在 snap；默认硬切进来不缩放
   const cam = CAM.track(s.base, s.events, t), im = ctx.frame(q, t);
-  c.save(); c.translate(dx, 0);
+  c.save(); c.translate(dx, 0); c.beginPath(); c.rect(0, 0, W, H); c.clip();   // 只画在自己这一屏里：模糊底是 2 倍大的，不裁会在横移时压到邻屏
   if (!ctx.alpha) { c.fillStyle = T.fullBg; c.fillRect(0, 0, W, H); }
   CAM.with(c, { x: cam.x, y: cam.y, z: cam.z * slam }, g => {
     if (!ctx.alpha) { const bg = PAINT.cached('t2full_bg_' + slides.indexOf(s) + '_' + W + 'x' + H + (T.pal ? T.pal.bg : ''), W, H, gg => { gg.filter = T.pal ? 'blur(48px) saturate(0.5)' : 'blur(48px) brightness(0.42) saturate(0.8)'; MD.cover(gg, cd.im, { x: -80, y: -80, w: W + 160, h: H + 160, clip: false }); gg.filter = 'none';

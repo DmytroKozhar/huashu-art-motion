@@ -1,6 +1,7 @@
 // 片段 · Kurzgesagt 式扁平科普（y1）：深墨色平涂底（不写 theme 时；不再是靛紫渐变夜空）、扁平中心物＝要讲的那个概念；每个要点是一颗卫星节点，
 // 带标签胶囊弹出（过冲 108%）、信号沿连线流动。环境层（星闪、粒子、信号脉冲）一直轻轻动；中心物、节点、标签落定后停住，
-// 相机不慢推：只在 highlight 这一刻快推 0.28s（推近约 30%）、连着的 highlight 同倍率横移 0.30s，然后停住。
+// 相机不匀速慢推：只在 highlight 这一刻推近约 30%、连着的 highlight 同倍率移过去，然后停住。
+// spec 级 data.camera 'smooth'（默认，推近 0.9s、换节点 0.7s，sineInOut）| 'snap'（重音：快推 0.28s、横移 0.30s）。
 // 招牌是尺度穿行：enter 让相机对数推进一颗卫星，推到它的颜色填满整屏，再从同色的新中心物里拉出来——「里面是什么」。
 // cues：title（顶部标题逐字上浮；text）· point（当前这一层的一个卫星节点＋标签：text；data.color 换强调色）
 //       highlight（相机推近第 data.index 个节点（只数当前这一层的 point，从 0 起；默认最新），其余节点和标签变暗；1.2s 推完）
@@ -68,12 +69,13 @@ return {
       if (L.exit) { const nd = L.exit.idx != null ? L.nodes[L.exit.idx] : L.nodes.filter(z => z.q.at <= L.exit.at).pop() || L.nodes[L.nodes.length - 1];
         L.exit.node = nd; const N = levels[li + 1]; N.col = nd ? nd.col : ACC[0]; N.center = L.exit.q.text || (nd && nd.q.text) || '';
         N.style = styleFor(N.center, (L.exit.q.data && L.exit.q.data.style) || {}, N.col); N.col = N.style.color; }
-      // 本层的镜头：停住；highlight 这一刻快推 0.28s 到节点（推近约 30%，目标点往中心物偏一点，中心不被裁掉太多），
-      // 已经推近时下一次 highlight 同倍率横移 0.30s 到新节点；之后停住
+      // 本层的镜头：停住；highlight 这一刻推近到节点（推近约 30%，目标点往中心物偏一点，中心不被裁掉太多），
+      // 已经推近时下一次 highlight 同倍率移到新节点；之后停住。时长按 data.camera
       const Z = ctx.portrait ? 1.28 : 1.32; L.events = []; let zoomed = false;
       for (const h of L.hls) {
         const nd = h.data && h.data.index != null ? L.nodes[h.data.index] : L.nodes.filter(z => z.q.at <= h.at).pop(); if (!nd) continue;
-        L.events.push(zoomed ? { at: h.at, kind: 'pan', x: lerp(nd.x, cx, 0.35), y: lerp(nd.y, cy, 0.35) } : { at: h.at, kind: 'to', x: lerp(nd.x, cx, 0.35), y: lerp(nd.y, cy, 0.35), z: Z });
+        const snap = (ctx.data && ctx.data.camera) === 'snap';
+        L.events.push(zoomed ? { at: h.at, kind: snap ? 'pan' : 'glide', x: lerp(nd.x, cx, 0.35), y: lerp(nd.y, cy, 0.35) } : { at: h.at, kind: 'to', x: lerp(nd.x, cx, 0.35), y: lerp(nd.y, cy, 0.35), z: Z, ...(snap ? { dur: MO.PULSE.punch, ease: MO.cubicInOut } : {}) });
         zoomed = true; h.node = nd;
       }
     });
@@ -94,7 +96,7 @@ return {
         c.restore(); } }
   },
 };
-// 相机：本层的脉冲镜头；正在钻出去 → 推进那个节点到满屏；刚钻进来 → 从满屏的中心物拉出
+// 相机：本层的镜头动作表；正在钻出去 → 推进那个节点到满屏；刚钻进来 → 从满屏的中心物拉出
 function camAt(L, t, ctx) {
   const { W, H } = ctx;
   if (L.from && t < L.end0) {                                            // 拉出：z 从「中心物盖满屏」对数降到 1，中心物从屏幕中心回到它的位置

@@ -24,7 +24,8 @@
   ③ 屏上字 ≤ 8 字（汉字一字一个，一串英文或数字算一个）                                             → 红
   ④ 第一镜不能是文字主导（物列是标题/字，或屏上字 ≥ 7 个，或做法是 y5 动态文字）                     → 红
   ⑥ 单镜 2–6 秒；6–8 秒、短于 2 秒 → 黄；长于 8 秒 → 红；6–8 秒的镜头超过两成 → 红
-  ⑦ 连续三镜「镜头」列相同 → 黄
+  ⑦ 连续三镜「镜头」列相同（「停」「横移」不算）→ 黄
+  ⑮ 连续三镜都在往里推（缓推、慢推、快推、推近、推进、砸入、zoom in 混着也算）→ 黄
   ⑧ 最后一镜不能是文字主导（居中金句卡、纯字卡；判法同④）                                         → 红
   ⑪ 中间某镜是带数字的文字主导镜（单独一张数字字卡）                                              → 黄
   ⑨ 给了 --script：屏上字里的阿拉伯数字（百分数、年份、带单位的数）在文稿里找不到                   → 红
@@ -37,7 +38,8 @@
   ⑬ 色板：色值落在蓝紫区（色相 225°–300°、饱和度 ≥0.30）→ 红（写了「允许蓝紫」降黄）；超过 6 色 → 黄
   ⑭ 角色：角色行写代码画／Q 版小人／机器人 → 红；物列有机器人、小人、火柴人、吉祥物、卡通人而角色不是帧库 → 红；
        用了 y4 而角色不是帧库 → 红；物列给金币、小球、离子长脸 → 黄
-  时间段前后接不上、整表没有一次快推/横移/砸入 → 黄
+  ⑯ 重音动作（快推、砸入、甩）超过镜头数的三分之一 → 黄
+  时间段前后接不上、整表没有任何镜头动作（全是停和切）→ 黄
 
 退出码：有红灯 1；只有黄灯或全绿 0；读不了文件或找不到表 2。只用标准库。
 """
@@ -60,7 +62,10 @@ WEAK = sorted("""出现 显示 展示 呈现 浮现 淡入 淡出 渐显 弹出 
 解释 强调 标注 写出 打出 入场 出场""".split(), key=len, reverse=True)
 ACT_FILLER = re.compile(r"[\d一二三四五六七八九十两几个条张行句段组页块排些堆串的地着了过和与及跟或也都再又并、，,。.;；:：/／+＋\s（）()「」“”\"'\-—–~～…|]"
                         r"|逐条|依次|一一|逐个|逐一|逐渐|渐渐|慢慢|缓缓|然后|开始|同时|接着|陆续|一起|一下|画面|屏幕|上")
-CAM_FAST = ("快推", "横移", "砸入", "推近", "甩")
+# 镜头列的词表：停／缓推／拉远／横移／快推／砸入／切（甩＝甩镜）。用法与时长见 references/镜头语言.md
+CAM_MOVE = ("缓推", "拉远", "拉开", "横移", "快推", "砸入", "推近", "推", "甩", "移")
+CAM_IN = ("缓推", "快推", "推近", "砸入", "慢推", "推进", "推镜", "推", "zoom in", "zoom-in", "zoomin")
+CAM_ACCENT = ("快推", "砸入", "甩")
 # ① 物列只剩这些词：是空画面，不是版面元素，改法不同
 EMPTY_SCENE = re.compile(r"空镜|空景|空画面|空屏|黑场|黑屏|白屏|全黑|全白|暗场|留白|纯色|渐变|^背景$|^底色$|^[黑白]底$")
 EMPTY_CELL = {"", "-", "—", "–", "无", "空", "（空）", "(空)", "/", "／", "——"}
@@ -318,11 +323,11 @@ def lint(text, script=None):
         elif r["dur"] > 8:
             bad((RED, "⑥时长", f"这一镜 {r['dur']:g} 秒，超过 8 秒", "拆成两三镜，每镜 2–6 秒，换一个画面或换一个镜头动作"))
         elif r["dur"] > 6:
-            bad((YELLOW, "⑥时长", f"这一镜 {r['dur']:g} 秒（6–8 秒只允许个别）", "能拆就拆；不拆就保证镜头里有一次快推或横移"))
+            bad((YELLOW, "⑥时长", f"这一镜 {r['dur']:g} 秒（6–8 秒只允许个别）", "能拆就拆；不拆就让这一镜里发生一件新事：物的下一个动作、横移到下一件、拉远看全貌"))
         elif r["dur"] < 2:
             bad((YELLOW, "⑥时长", f"这一镜只有 {r['dur']:g} 秒", "插入镜可以短，口播在这里念不完一句就并到相邻一镜"))
         if is_empty(cam):
-            bad((YELLOW, "镜头", "镜头列空着", "写一个：停／快推／横移／砸入／切"))
+            bad((YELLOW, "镜头", "镜头列空着", "写一个：停／缓推／拉远／横移／快推／砸入／切"))
         if "tags" in col:
             r["tags"] = tag_count(get(cells, "tags"))
             if r["tags"] > 3:
@@ -358,8 +363,14 @@ def lint(text, script=None):
     # ⑦ 连续三镜镜头相同
     for k in range(2, len(rows)):
         c = rows[k]["cam"]
-        if c and not is_empty(c) and c == rows[k - 1]["cam"] == rows[k - 2]["cam"]:
-            rows[k]["issues"].append((YELLOW, "⑦镜头", f"连续三镜都是「{c}」", "中间那镜换一个动作：停／快推／横移／砸入／切轮着用"))
+        if c and not is_empty(c) and c not in ("停", "横移") and c == rows[k - 1]["cam"] == rows[k - 2]["cam"]:   # 停可以连着；调查桌上一件件横移过去也是正常写法
+            alt = "／".join(w for w in ("停", "缓推", "拉远", "横移", "切") if w != c)
+            rows[k]["issues"].append((YELLOW, "⑦镜头", f"连续三镜都是「{c}」", f"中间那镜换一个动作：{alt}，按这一镜要观众看什么来选"))
+    # ⑮ 连续三镜都往里推：每镜都推一次，整片就成了一推一推的 zoom in（2026-10-12 诺奖短片 102 秒推近约 48 次，被判「太多、太快、不 smooth」）
+    inward = [any(w in r["cam"].lower() for w in CAM_IN) and "拉" not in r["cam"] and "out" not in r["cam"].lower() for r in rows]
+    for k in range(2, len(rows)):
+        if inward[k] and inward[k - 1] and inward[k - 2] and not any(i[1] == "⑦镜头" for i in rows[k]["issues"]):
+            rows[k]["issues"].append((YELLOW, "⑮推近", "连续三镜都在往里推", "推进去之后要有来有回：中间换成停、拉远、横移，或硬切换个景别；实拍录像本身在动就停住"))
     # 时间段接续
     for k in range(1, len(rows)):
         a, b = rows[k - 1]["span"], rows[k]["span"]
@@ -375,8 +386,12 @@ def lint(text, script=None):
     if len(long_) > max(1, n // 5):
         table.append((RED, "⑥时长", f"6–8 秒的镜头有 {len(long_)} 个（第 {'、'.join(map(str, long_))} 镜），只允许个别",
                       "拆开，每镜 2–6 秒"))
-    if not any(any(w in r["cam"] for w in CAM_FAST) for r in rows):
-        table.append((YELLOW, "镜头", "整表没有一次快推、横移或砸入", "交付门禁量的是镜头内快动作，没有的话 deliver.py 多半红灯；每两三镜放一次"))
+    if not any(any(w in r["cam"] for w in CAM_MOVE) for r in rows):
+        table.append((YELLOW, "镜头", "整表没有任何镜头动作，全是停和切", "交付门禁量的是镜头内运动，全停多半红灯；在要带观众视线的地方放缓推、横移或拉远（物自己的动作也算运动）"))
+    acc = [r["n"] for r in rows if any(w in r["cam"] for w in CAM_ACCENT)]
+    if n >= 6 and len(acc) * 3 > n:
+        table.append((YELLOW, "⑯重音", f"快推／砸入／甩用了 {len(acc)}/{n} 镜（第 {'、'.join(map(str, acc))} 镜），重音太多就没有重音",
+                      "只留给揭晓、反转、关键数字那几下；其余改成缓推、横移、拉远或停"))
     total = sum(r["dur"] or 0 for r in rows)
     if "how" in col:
         clips = {}

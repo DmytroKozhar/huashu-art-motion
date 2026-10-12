@@ -33,7 +33,8 @@
 其余指标只报告（最多黄灯，不拦）。静止类指标（静止帧占比、最长连续静止、最长无事件间隔）会把
 「停住→猛动→停住」的好片判反，所以绝不能拿来当门禁；黄灯只是「去看这一段」。
 
-拦不住的：每页硬塞一次快推的 PPT、前紧后松（看最差 30 秒窗口）、页框与米底小图、讲不明白。
+拦不住的：每页硬塞一次推近的 PPT（「推近次数」黄灯提示去看）、前紧后松（看最差 30 秒窗口）、页框与米底小图、讲不明白。
+快动帧不分快慢：1 秒左右推近 20% 的缓推和 0.28 秒快推记的快动帧差不多（2026-10-12 用诺奖短片三帧实测），过门不需要把镜头改快。
 「去看」的黄灯项和独立审片仍然要做。
 """
 from __future__ import annotations
@@ -78,6 +79,9 @@ METRICS = {
     "flat_light":         ("浅色空底面积（米底/白底）", "high_bad", 0.35, None, False, ""),
     "page_frame_share":   ("固定页框时长占比", "high_bad", 0.30, None, False, ""),
     "slow_zoom_share":    ("匀速慢缩放镜头时长占比", "high_bad", 0.70, None, False, ""),
+    "push_in_per_min":    ("推近次数（下限）", "high_bad", 8.0, None, False, "次/分钟"),
+    "fast_push_per_min":  ("其中 0.5 秒内的快推", "info", None, None, False, "次/分钟"),
+    "push_in_share":      ("推近占推拉事件比例", "info", None, None, False, ""),
     "slow_cam_share":     ("慢漂相机镜头时长占比", "info", None, None, False, ""),
     "dissolve_share":     ("交叉淡化占转场比例", "high_bad", 0.60, None, False, ""),
     "local_fade_ratio":   ("原地淡变占变化帧比例", "info", None, None, False, ""),
@@ -352,6 +356,31 @@ def analyze(path, sub_band=None, vertical="auto", template=None, verbose=False):
     dead_bg = float(np.average(dead_w, weights=shot_w)) if len(shot_w) else 0.0
     dead_flat = float(np.average(dead_flat_w, weights=shot_w)) if len(shot_w) else 0.0
     slow_zoom_share = slow_zoom_dur / secs
+
+    # --- 推近事件：镜头内连续放大（每帧 >0.4%，12fps，中间允许断 1 帧）累计 ≥3% 算一次；0.5 秒内完成的记作快推。
+    # 2026-10-12 诺奖短片（102 秒，代码里推近约 48 次、全部往里）被判「太多、太快、不 smooth」之后加的，只报告、黄灯提示去看。
+    # 这是下限：实拍录像自己在动时相机变换估不出来，上面的推近量不到（那支片量到 20 次，约每分钟 12 次）。
+    def zoom_runs(mask, sign):
+        ev, i = [], 0
+        while i < len(mask):
+            if mask[i]:
+                j = k = i
+                while k + 1 < len(mask) and (mask[k + 1] or (k + 2 < len(mask) and mask[k + 2])):
+                    k += 1
+                    if mask[k]:
+                        j = k
+                seg = zr[i:j + 1] * sign
+                if seg[seg > 0].sum() >= 0.03:
+                    ev.append((i, j))
+                i = j + 1
+            else:
+                i += 1
+        return ev
+    # 只排除切点那一帧和交叉淡化：紧跟切点起推的快推，会被「像切点」的窗口整段吞掉，用 trans 会漏一半
+    zx = cut | in_diss
+    push_in = zoom_runs((zr > 0.004) & ~zx, 1)
+    pull_out = zoom_runs((zr < -0.004) & ~zx, -1)
+    fast_push = sum(1 for a, b in push_in if (b - a + 1) / FPS <= 0.5)
     zoom_cv = float(np.std(zoom_totals) / (np.mean(zoom_totals) + 1e-9)) if len(zoom_totals) >= 3 else float("nan")
 
     # --- 抽样帧上的面积类指标
@@ -440,6 +469,10 @@ def analyze(path, sub_band=None, vertical="auto", template=None, verbose=False):
         "slow_zoom_share": round(float(slow_zoom_share), 3),
         "slow_cam_share": round(float(slow_cam_dur / secs), 3),
         "zoom_curve_cv": round(zoom_cv, 3) if zoom_cv == zoom_cv else None,
+        "push_in_per_min": round(len(push_in) / secs * 60, 1),
+        "fast_push_per_min": round(fast_push / secs * 60, 1),
+        "push_in_share": round(len(push_in) / max(1, len(push_in) + len(pull_out)), 2),
+        "push_in_times_s": [round(a / FPS, 1) for a, _ in push_in],
         "subject_box": round(float(np.median(subj)), 3),
         "flat_light": round(float(np.mean(flat_light)), 3),
         "template_sim_share": round(tsim_share, 3) if tsim_share == tsim_share else None,
@@ -596,11 +629,11 @@ def grade(res):
 
 
 # ---------------------------------------------------------------- 读给人听
-FIX = ("按 SKILL.md 窄桥第一条「动在事件上」改：每个镜头在口播节点上做「停住 → 快推 / 横移 / 砸入 → 停住」——"
-       "快推 0.28 秒推近 18–32%、同倍率横移 0.30 秒、砸入 0.17 秒，用 CAM.track 写镜头动作表（MO.slam 砸入）；"
-       "有截图、照片、录像就用 MD.cover 满幅铺开，念到哪一处就把焦点推近到哪一处。"
-       "匀速慢推、淡入淡出、转场都不算数（转场再快也被排除在外）。"
-       "别为了过门每页硬塞一次快推：门禁只拦「整片没有猛动作」这一种 PPT，页框、米底小图、前紧后松它拦不住。")
+FIX = ("按 references/镜头语言.md 在「观众这一刻该看哪」的地方补镜头内运动：要看清细节就缓推（0.6–1.5 秒，CAM.track 的 push），"
+       "在几件东西之间走就横移（glide），要看全貌就拉远（pull）；物自己的大动作（生长、翻页、倒水、录像里的动作）也算，实拍录像本身在动就停住。"
+       "快推、砸入是重音，只给揭晓、反转、关键数字。每镜匀速慢推几个百分点、淡入淡出、转场都不算数（转场再快也被排除在外）。"
+       "1 秒左右推近 20% 的缓推和 0.28 秒快推在这项上记分差不多，不用为了过门把推镜改快。"
+       "也别为了过门每镜塞一次推近：2026-10-12 那支片每 2 秒一推，被判「太多、太快、不 smooth」。")
 
 BLANK_FIX = ("空画面这一段让主角或主物留在画里：要换气就让它停住、拉远，或者镜头从它身上横移到下一个物；"
              "转场不要经过纯色底（黑场、纯色闪、渐变底）停留 0.3 秒以上。白板、黑底片只要画面上有笔画、线条、字，就不算空。")
@@ -623,6 +656,8 @@ LOOK = {
     "flat_light": lambda r: f"米底/白底空着的面积平均占 {r['flat_light']:.0%}（白板等浅底风格可以如此，确认是风格不是空着）",
     "page_frame_share": lambda r: f"{r['page_frame_share']:.0%} 的时长被固定的页眉、页码、标题栏、logo 框着",
     "slow_zoom_share": lambda r: f"{r['slow_zoom_share']:.0%} 的时长是匀速慢推/慢拉镜头",
+    "push_in_per_min": lambda r: (f"每分钟至少推近 {r['push_in_per_min']:g} 次（其中快推 {r['fast_push_per_min']:g} 次，推近占推拉 {r['push_in_share']:.0%}），"
+                                  f"一推一推的 zoom in 会显得急、不顺；用正常速度看一遍，推进去之后有没有拉远、横移还回来（references/镜头语言.md）"),
     "dissolve_share": lambda r: f"转场里 {r['dissolve_share']:.0%} 是交叉淡化",
     "template_sim_share": lambda r: f"{r['template_sim_share']:.0%} 的时长和示范片构图几乎一样",
 }

@@ -3,6 +3,7 @@
 用引擎渲两支合成小片：同三张图（仓库 assets/ 里有纹理的总览图）、每镜 3 秒、硬切，
   slow  —— 每镜匀速慢推 7.5%（翻页式 PPT 的做法）  → film_gate 应红灯
   punch —— 每镜停住、一次 0.3 秒快推 30%、再停住    → film_gate 应绿灯
+  smooth —— 每镜停住、一次 0.9 秒缓推 25%、再停住   → film_gate 不应红灯（缓推不用改快也能过门）
 测试只在本机装了 uv、ffmpeg 和 Playwright Chromium 时跑（CI 的媒体契约任务没有这些，自动跳过）。
 测试用的语法文件写在临时复制的引擎里，不进仓库。
 """
@@ -33,6 +34,7 @@ CLIPS._gate_probe = { draw(c, t, ctx) {
   let z = 1;
   if (mode === 'slow') z = CAM.zlerp(1, 1.075, U.clamp((t - q.at) / len));                                   // 匀速慢推
   if (mode === 'punch') z = CAM.track({}, [{ at: q.at + len * 0.4, kind: 'punch', k: 0.3, dur: 0.3 }], t).z;  // 停住→快推→停住
+  if (mode === 'smooth') z = CAM.track({}, [{ at: q.at + len * 0.3, kind: 'push', k: 0.25 }], t).z;            // 停住→0.9 秒缓推→停住
   c.fillStyle = '#000'; c.fillRect(0, 0, ctx.W, ctx.H);
   MD.cover(c, ctx.still(q), { z });
 } };
@@ -72,7 +74,7 @@ def setUpModule():
     for f in IMAGES:
         shutil.copy(f, tmp / 'img' / f.name)
     W['eng'] = eng
-    for mode in ('slow', 'punch'):
+    for mode in ('slow', 'punch', 'smooth'):
         d = tmp / mode
         d.mkdir()
         spec = {'grammar': '_gate_probe', 'duration': SHOT * len(IMAGES), 'fps': 30, 'width': 960, 'height': 540,
@@ -80,7 +82,7 @@ def setUpModule():
                 'cues': [{'at': SHOT * k, 'kind': 'shot', 'image': f'../img/{f.name}'} for k, f in enumerate(IMAGES)]}
         (d / 'spec.json').write_text(json.dumps(spec, ensure_ascii=False))
         W[mode] = d
-    for mode in ('slow', 'punch'):
+    for mode in ('slow', 'punch', 'smooth'):
         r = run('--with', 'playwright', 'python', eng / 'render.py', '--spec', W[mode] / 'spec.json', '--out', W[mode] / f'{mode}.mp4')
         if r.returncode != 0 and 'Executable doesn' in (r.stdout + r.stderr):
             raise unittest.SkipTest('Playwright Chromium 没装：uv run --with playwright playwright install chromium')
@@ -105,7 +107,7 @@ class FilmGateTests(unittest.TestCase):
         self.assertLess(res['fast_ratio'], 0.035)
         self.assertIn('读起来像翻页', res['explain']['summary'])
         self.assertIn('CAM.track', res['explain']['fix'])
-        self.assertIn('MD.cover', res['explain']['fix'])
+        self.assertIn('镜头语言', res['explain']['fix'])
 
     def test_punch_is_green(self):
         code, res = gate(W['punch'] / 'punch.mp4')
@@ -113,6 +115,13 @@ class FilmGateTests(unittest.TestCase):
         self.assertEqual(res['gate_light'], 'green')
         self.assertGreaterEqual(res['fast_ratio'], 0.06)
         self.assertIsNone(res['explain']['fix'])
+
+    def test_smooth_push_is_not_red(self):
+        # 0.9 秒缓推 25% 不用改成快推也能过门：门禁量的是运动量，不是速度
+        code, res = gate(W['smooth'] / 'smooth.mp4')
+        self.assertEqual(code, 0, res['explain'])
+        self.assertNotEqual(res['gate_light'], 'red')
+        self.assertGreaterEqual(res['fast_ratio'], 0.035)
 
     def test_short_clip_only_warns(self):
         # 短于 20 秒的片段读数没标定过：同一支慢推片默认只亮黄灯、不拦

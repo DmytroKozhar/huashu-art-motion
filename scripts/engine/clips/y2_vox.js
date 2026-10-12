@@ -5,7 +5,8 @@
 //       title（Borders 式黑底白字标签条，打字 13 字/秒）· point（横线索引卡，打字）
 //       highlight（当前这张图上 data.rect=[x,y,w,h]（0..1，相对图片）：at 起荧光笔扫过 → 红笔圈住 → 相机推近那一块）
 // 照片和截图是主角：镜头停在一张上时它占画面八九成（横屏宽 ≈90%、或高 ≈86%）。横屏素材左→右排、竖屏上→下排；
-// 镜头是脉冲：在下一件的 at 之前 0.30s 横移过去（红线先描出去、镜头再追），highlight 这一刻快推 0.28s 到那一块，其余时间停住，不慢推。
+// 镜头：在下一件的 at 之前移过去（红线先描出去、镜头再追），highlight 时推近那一块，其余时间停住。
+//   spec 级 data.camera 'smooth'（默认，找下一件 0.7s、推近 0.9s，sineInOut，取 Vox 实测 0.5–1.5s）| 'snap'（重音：横移 0.30s、快推 0.28s）。
 // spec.theme（全片色板 ctx.pal）：桌面纸纹底色 bg，索引卡 surface、字 ink，标题条 ink 底 surface 字，红线/图钉/红圈 accent，
 //   索引卡横线 accent2 淡色，荧光笔 accent 提亮；照片的冲印白边、胶带是实物，照旧。
 CLIPS.y2_vox = (() => {
@@ -61,6 +62,7 @@ return {
     const Hs = H - ctx.safe.top - ctx.safe.bottom;                           // 让开字幕带后的可用高度；画面中心同步下移/上移（draw 里平移）
     const zFor = it => it.kind === 'image' ? clamp(Math.min(W * 0.9 / it.w, Hs * 0.86 / it.h), 0.5, 2.4) : clamp(Math.min(W * 0.82 / it.w, Hs * 0.8 / it.h), 0.5, 1.6);   // 照片撑满画面，文字卡别放太大
     keys = []; let last = null;
+    const snap = (ctx.data && ctx.data.camera) === 'snap', MV = snap ? { next: MO.PULSE.pan, in: MO.PULSE.punch, ease: MO.cubicInOut } : { next: MO.PULSE.glide, in: MO.PULSE.push, ease: MO.sineInOut };
     const hls = ctx.of('highlight');
     const events = [...items.map(it => ({ at: it.q.at, it })), ...hls.map(h => ({ at: h.at, h }))].sort((a, b) => a.at - b.at);
     let curItem = null;
@@ -68,8 +70,8 @@ return {
       if (e.it) {
         const tgt = { x: e.it.x, y: e.it.y, z: zFor(e.it) };
         if (!last) { keys.push({ t: 0, ...tgt }); }
-        else { const P = MO.PULSE.pan, t0 = Math.max(last.t + 0.05, e.at - P - 1 / ctx.FPS), t1 = t0 + P;   // 横移 0.30s，at 前一帧到位（上一个动作没走完就接着走）
-          keys.push({ t: t0, x: last.x, y: last.y, z: last.z }); keys.push({ t: t1, ...tgt, ease: MO.cubicInOut }); }
+        else { const P = MV.next, t0 = Math.max(last.t + 0.05, e.at - P - 1 / ctx.FPS), t1 = t0 + P;   // 移到下一件，at 前一帧到位（上一个动作没走完就接着走）
+          keys.push({ t: t0, x: last.x, y: last.y, z: last.z }); keys.push({ t: t1, ...tgt, ease: MV.ease }); }
         last = keys[keys.length - 1]; curItem = e.it;
       } else if (curItem && curItem.kind === 'image' && e.h.data && e.h.data.rect) {
         const R = e.h.data.rect, ib = imgBox(curItem, u);
@@ -81,8 +83,8 @@ return {
         // 框的起点（荧光笔从左缘扫起）在当前镜头里看得见：先画、at+0.2 再推近；看不见（上一次推近后它在画外）：
         // 先把镜头移过去、at 前一帧到位，再揭开——否则揭开那一帧在画外，观众晚 0.2s 以上才看到（2026-10 竖屏实测晚 7 帧）
         const x0 = cx - rw / 2, inView = Math.abs(x0 - last.x) * last.z < W / 2 - 20 * u && Math.abs(cy - last.y) * last.z < Hs / 2 - rh * last.z / 2;
-        const P = MO.PULSE.punch, t0 = inView ? Math.max(last.t + 0.05, e.at + 0.2) : Math.max(last.t + 0.05, e.at - P - 1 / ctx.FPS), t1 = t0 + P;   // 快推 0.28s
-        keys.push({ t: t0, x: last.x, y: last.y, z: last.z }); keys.push({ t: t1, x: cx, y: cy, z, ease: MO.cubicInOut });
+        const P = MV.in, t0 = inView ? Math.max(last.t + 0.05, e.at + 0.2) : Math.max(last.t + 0.05, e.at - P - 1 / ctx.FPS), t1 = t0 + P;   // 推近（默认缓推，snap 快推）
+        keys.push({ t: t0, x: last.x, y: last.y, z: last.z }); keys.push({ t: t1, x: cx, y: cy, z, ease: MV.ease });
         last = keys[keys.length - 1];
       }
     }

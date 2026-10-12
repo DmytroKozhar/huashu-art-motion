@@ -14,10 +14,11 @@
   3. 动感：避开转场后 0.35s 镜头冲击，在本段静止区按 --fps 连续取帧，报运动面积（相邻帧变化 >12 的像素占比）均值，
      和「静止帧对」比例（相邻帧几乎不变 <0.05% —— 迁移测试 A 发现只看首尾差会漏掉一卡一卡）。
   4. 流畅：相邻帧差的峰值 / 中位数。>6 且峰值 >3% 记为「跳变」（整屏笔触按 8fps 重洗、某帧穿帮、闪烁都会冒出来）。
-     脉冲镜头（快推 0.28s、横移 0.30s、砸入 0.17s）不算跳变，单独记为「镜头事件」：从跳变帧往两边扩到帧差回落，
-     这一串至少 2 对帧、不长于 0.35s（+1 帧），且最后一帧离第一帧最远（推过去就停在那，不是闪一下又回来）。
+     镜头动作（快推 0.28s、横移 0.30s、砸入 0.17s，缓推 0.9s、找下一件 0.7s、拉远 1.1s）不算跳变，单独记为「镜头事件」：从跳变帧往两边扩到帧差回落，
+     这一串至少 2 对帧、不长于 2s（+1 帧），且最后一帧离第一帧最远（推过去就停在那，不是闪一下又回来）；长于 0.35s 的还要一路平滑，
+     中间没有比前后两帧大 2.5 倍以上的单帧尖峰。2026-10-12 之前只认 0.35s 以内的，缓推会被整串记成跳变，等于逼着模型把镜头改快。
      孤立的一两帧（穿帮、闪白、整屏重洗）、闪过去又回来的、连续拖得更长的，照旧记跳变。只看像素，不读相机动作表，
-     所以手写的快推和 CAM.track 一样认；代价是 0.35s 内的单调大变化（比如一下子整屏换成另一张图又刚好接着推）也会被当成镜头事件。
+     所以手写的推镜和 CAM.track 一样认；代价是单调、平滑的大变化（比如一下子整屏换成另一张图又刚好接着推）也会被当成镜头事件。
 另做「转场冒烟」：每个带转场的段在 p=.25/.5/.75 渲整帧（renderFrame），报错计入页面报错——段内取帧用 renderSolo，
 转场代码一次都不会执行，转场崩了也能全绿（全风格样片移植时踩到）。
 判据是经验阈值不是规则：运动 0.5–8% 之间多数段好看；静止帧对 >40% 读作卡；跳变 >0 先看帧再判断（有意的节拍闪不算错）。
@@ -207,8 +208,8 @@ def near_blank(f):
     return float((np.abs(f - med).max(axis=2) > 24).mean()) < 0.003
 def img(b64, w=480): return np.asarray(Image.open(io.BytesIO(base64.b64decode(b64))).convert('RGB').resize((w, round(w * VH / VW)))).astype(np.int16)   # 按画幅缩，竖屏不压扁
 
-def camera_events(frames, diffs, idx, fps, max_s=0.35):
-    """把跳变里的脉冲镜头挑出来（判据见文件头第 4 条）。idx：跳变所在的帧对下标。返回 (还算跳变的下标, 镜头事件 [(l, r)])。"""
+def camera_events(frames, diffs, idx, fps, max_s=2.0):
+    """把跳变里的镜头动作（推拉、横移、砸入）挑出来（判据见文件头第 4 条）。idx：跳变所在的帧对下标。返回 (还算跳变的下标, 镜头事件 [(l, r)])。"""
     keep, events = [], []
     for i in idx:
         if any(l <= i <= r for l, r in events): continue
@@ -217,7 +218,8 @@ def camera_events(frames, diffs, idx, fps, max_s=0.35):
         while r < len(diffs) - 1 and diffs[r + 1] > thr: r += 1
         n = r - l + 1
         far = [float(np.abs(frames[k] - frames[l]).mean()) for k in range(l + 1, r + 2)]   # 这一串里每一帧离第一帧多远
-        if 2 <= n <= max_s * fps + 1 and far[-1] >= 0.8 * max(far): events.append((l, r))
+        smooth = n <= 0.35 * fps + 1 or all(diffs[k] <= 2.5 * max(diffs[k - 1], diffs[k + 1]) + 0.5 for k in range(l + 1, r))   # 长于 0.35s 的要一路平滑，中间不许有单帧尖峰
+        if 2 <= n <= max_s * fps + 1 and far[-1] >= 0.8 * max(far) and smooth: events.append((l, r))
         else: keep.append(i)
     return [i for i in keep if not any(l <= i <= r for l, r in events)], events
 
