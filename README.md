@@ -1,5 +1,7 @@
 <div align="center">
 
+**简体中文** | [English](README.en.md)
+
 <img src="assets/showcase/hero.png" alt="huashu-art-motion电影画廊：35种艺术风格，9种解说语法" width="100%" />
 
 # huashu-art-motion · 艺术动画
