@@ -23,13 +23,13 @@ import uuid
 
 
 HOST = "https://openspeech.bytedance.com"
-RES_CLONE = "volc.megatts.voiceclone"             # 训练 / 查询
-RES_TTS = "seed-icl-2.0"                          # 合成
+RES_CLONE = "volc.megatts.voiceclone"             # Навчання / запит
+RES_TTS = "seed-icl-2.0"                          # Синтез
 REGISTRY = pathlib.Path.home() / ".koubo" / "voices.json"
-MAX_UPLOAD = 10 * 1024 * 1024                     # 参考音频上限（原始文件，非 base64）
+MAX_UPLOAD = 10 * 1024 * 1024                     # Обмеження розміру еталонного аудіо (початковий файл, не base64)
 
 
-# ---------- 基础设施 ----------
+# ---------- Інфраструктура ----------
 
 ACTIVE_CONFIG = None
 
@@ -59,7 +59,7 @@ def _session():
 
 
 def api(path, resource_id, payload, stream=False, retries=1):
-    # POST超时可能已经被接受/计费；不重新生成request_id盲目重试。
+    # POST із тайм-аутом міг уже бути прийнятий/оплачений; не повторюємо наосліп із новим request_id.
     import requests
     appid, token = load_env()
     headers = {
@@ -129,7 +129,7 @@ def synthesize(text, speaker, out, fmt="wav", sample_rate=48000,
     if fidelity:
         req["tone_fidelity"] = True
     if speech_rate:
-        # 实测：只有放在 audio_params 里才生效，放 req_params 顶层会被静默忽略
+        # Перевірено: працює лише всередині audio_params; на верхньому рівні req_params мовчки ігнорується.
         req["audio_params"]["speech_rate"] = int(speech_rate)
 
     r = api("/api/v3/tts/unidirectional", RES_TTS,
@@ -167,7 +167,7 @@ def fit_duration(path, target, tol=0.05):
         return cur, 1.0
     ratio = cur / target
     if not 0.9 <= ratio <= 1.1:
-        return cur, ratio        # 差太多，交给调用方决定（通常该改 speech_rate）
+        return cur, ratio        # Різниця завелика, рішення лишаємо виклику (зазвичай треба змінити speech_rate).
     tmp = pathlib.Path(tempfile.mkstemp(suffix=path.suffix)[1])
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(path),
                     "-filter:a", f"atempo={ratio:.6f}", str(tmp)], check=True)
@@ -195,7 +195,7 @@ def cmd_say(args):
     out = pathlib.Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    # 目标响度：可以直接给 dB，也可以指给一段参考音频（通常是原音轨那几秒）
+    # Цільова гучність: можна вказати dB безпосередньо або еталонний аудіофрагмент (зазвичай кілька секунд початкової доріжки).
     target_db = args.loudness
     if args.match:
         target_db = mean_volume(args.match, args.match_ss, args.match_t)
@@ -208,10 +208,10 @@ def cmd_say(args):
         if not args.fit:
             break
         ratio = dur / args.fit
-        if 0.93 <= ratio <= 1.07:      # 进入 atempo 无损区间，够了
+        if 0.93 <= ratio <= 1.07:      # Досягнуто діапазону atempo без втрат, цього достатньо.
             break
-        # speech_rate 是绝对值不是增量：rate r 对应 (1 + r/100) 倍速。
-        # 先还原成 rate=0 时的时长，再算要多少倍速才能落到目标上。
+        # speech_rate — абсолютне значення, не приріст: rate r відповідає швидкості (1 + r/100).
+        # Спершу відновлюємо тривалість для rate=0, потім обчислюємо швидкість для цільової тривалості.
         base = dur * (1 + speech_rate / 100)
         want = max(-50, min(100, int(round((base / args.fit - 1) * 100))))
         if want == speech_rate:
@@ -262,7 +262,7 @@ def cmd_train(args):
     if not src.is_file():
         sys.exit(f"✗ 找不到 {src}")
 
-    # 先挡住最常见的失败：喂进去的其实是底噪，服务端会回 45001122 no speaker detected
+    # Спершу відсіюємо найпоширенішу помилку: на вхід подано лише фоновий шум, сервер поверне 45001122 no speaker detected.
     vol = mean_volume(src, args.start, args.seconds)
     if vol is not None and vol < -36:
         print(f"⚠️ 这段平均电平只有 {vol:.1f} dB，很可能没有人声或人声太弱。")
@@ -280,7 +280,7 @@ def cmd_train(args):
         "audio": {"data": base64.b64encode(audio.read_bytes()).decode(), "format": fmt},
         "source": 2,
         "language": args.language,
-        "model_type": 5,                       # 5 = 声音复刻 2.0
+        "model_type": 5,                       # 5 = клонування голосу 2.0
     }
     if args.reference_text:
         payload["text"] = args.reference_text

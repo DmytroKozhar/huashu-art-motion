@@ -198,7 +198,7 @@ def import_artifact(file,out,meta):
     payload=Path(file).read_bytes()
     if hashlib.sha256(payload).hexdigest()!=meta['sha256']:raise c.ConfigError('验收期间图片已改变')
     meta=dict(meta,path=out.name)
-    # 配对写入由协作脚本锁串行；不覆盖用户现有版本。
+    # Парний запис серіалізується блокуванням спільного скрипта; наявну версію користувача не перезаписуємо.
     with c.locked(out):
         if out.exists() or sidecar.exists():raise c.ConfigError('目标已被其他进程创建')
         no_overwrite(out,payload)

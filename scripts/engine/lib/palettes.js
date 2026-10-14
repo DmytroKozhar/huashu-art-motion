@@ -1,17 +1,17 @@
-// 全片主题色板：spec.theme 写名字（或 {name, 覆盖的键} / 完整 6 键对象），clip.js 解析成 ctx.pal，8 个语法都按它上色——
-// 一支片子由几种语法拼起来时，底色、字色、强调色是同一套，不再各带各的写死配色。
-// 每套 6 个键：bg 底色 · surface 卡片/纸/面板 · ink 主文字 · sub 次要文字与线 · accent 强调 · accent2 第二强调。
-// 其余辅助色一律从这 6 个派生（PAL.mix 调明暗、PAL.alpha 调透明度），不引入色板外的色相。
+// Тематична палітра всього відео: spec.theme — назва, {name, перевизначені ключі} або повний об’єкт із 6 ключів. clip.js перетворює її на ctx.pal; усі 8 анімаційних мов беруть кольори звідси.
+// Коли відео поєднує кілька анімаційних мов, тло, текст і акценти мають єдину палітру замість окремих жорстко заданих наборів.
+// Кожна палітра має 6 ключів: bg — тло; surface — картка/папір/панель; ink — головний текст; sub — другорядний текст і лінії; accent — акцент; accent2 — другий акцент.
+// Усі допоміжні кольори виводяться з цих 6: PAL.mix змінює світлоту, PAL.alpha — прозорість. Не додавайте відтінків поза палітрою.
 (() => {
 window.PALETTES = {
-  paper:   { bg: '#F3EDE2', surface: '#FBF8F2', ink: '#1B1A17', sub: '#6B655B', accent: '#C8402F', accent2: '#2F5D62' },   // 纸本
-  poster:  { bg: '#FFD23F', surface: '#FFF6D6', ink: '#111111', sub: '#4A4433', accent: '#FF5A36', accent2: '#14213D' },   // 海报黄
-  ink:     { bg: '#121417', surface: '#1E2226', ink: '#F2EFE8', sub: '#A39E93', accent: '#F2B33D', accent2: '#5FB3A1' },   // 深墨
-  navy:    { bg: '#0D1B2A', surface: '#16293D', ink: '#EEF3F6', sub: '#8FA3B3', accent: '#5CC8E0', accent2: '#F2A93B' },   // 海军（平涂，不渐变）
-  bauhaus: { bg: '#EFE9DD', surface: '#FFFFFF', ink: '#111111', sub: '#555555', accent: '#D62828', accent2: '#1D4E89' },   // 包豪斯
-  snow:    { bg: '#E9EEF0', surface: '#FFFFFF', ink: '#1F2A30', sub: '#5E6B72', accent: '#D9482B', accent2: '#3E7C8C' },   // 雪原
-  wood:    { bg: '#EDE3D1', surface: '#F7F1E6', ink: '#2B2622', sub: '#7A6E62', accent: '#C4552D', accent2: '#3F5B4B' },   // 暖木
-  chalk:   { bg: '#23302B', surface: '#2E3D37', ink: '#F1EFE6', sub: '#A9B3AA', accent: '#F4D35E', accent2: '#E87D5A' },   // 黑板
+  paper:   { bg: '#F3EDE2', surface: '#FBF8F2', ink: '#1B1A17', sub: '#6B655B', accent: '#C8402F', accent2: '#2F5D62' },   // Папір.
+  poster:  { bg: '#FFD23F', surface: '#FFF6D6', ink: '#111111', sub: '#4A4433', accent: '#FF5A36', accent2: '#14213D' },   // Плакатний жовтий.
+  ink:     { bg: '#121417', surface: '#1E2226', ink: '#F2EFE8', sub: '#A39E93', accent: '#F2B33D', accent2: '#5FB3A1' },   // Темна туш.
+  navy:    { bg: '#0D1B2A', surface: '#16293D', ink: '#EEF3F6', sub: '#8FA3B3', accent: '#5CC8E0', accent2: '#F2A93B' },   // Темно-синій, суцільний, без градієнта.
+  bauhaus: { bg: '#EFE9DD', surface: '#FFFFFF', ink: '#111111', sub: '#555555', accent: '#D62828', accent2: '#1D4E89' },   // Баугауз.
+  snow:    { bg: '#E9EEF0', surface: '#FFFFFF', ink: '#1F2A30', sub: '#5E6B72', accent: '#D9482B', accent2: '#3E7C8C' },   // Снігове поле.
+  wood:    { bg: '#EDE3D1', surface: '#F7F1E6', ink: '#2B2622', sub: '#7A6E62', accent: '#C4552D', accent2: '#3F5B4B' },   // Тепле дерево.
+  chalk:   { bg: '#23302B', surface: '#2E3D37', ink: '#F1EFE6', sub: '#A9B3AA', accent: '#F4D35E', accent2: '#E87D5A' },   // Шкільна дошка.
 };
 const KEYS = ['bg', 'surface', 'ink', 'sub', 'accent', 'accent2'];
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -22,13 +22,13 @@ const PAL = window.PAL = {
   KEYS,
   names: () => Object.keys(window.PALETTES),
   rgb, hex,
-  mix: (a, b, t) => { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)); },   // a→b 走 t（0..1），返回 hex
+  mix: (a, b, t) => { const x = rgb(a), y = rgb(b); return hex(x.map((v, i) => v + (y[i] - v) * t)); },   // a→b за t (0..1), повертає hex.
   alpha: (c, a) => { const v = rgb(c); return `rgba(${v[0]},${v[1]},${v[2]},${a})`; },
-  lum: c => { const [r, g, b] = rgb(c).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; },   // WCAG 相对亮度
+  lum: c => { const [r, g, b] = rgb(c).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; },   // Відносна яскравість WCAG.
   contrast: (a, b) => { const x = PAL.lum(a), y = PAL.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); },
-  dark: p => PAL.lum(p.bg) < 0.2,                                                            // 深底色板（ink / navy / chalk）
-  on: (bg, cands) => cands.reduce((best, c) => PAL.contrast(bg, c) > PAL.contrast(bg, best) ? c : best),   // 压在 bg 上最清楚的那个字色
-  // spec.theme → 完整 6 键（多一个 name）。null / {} → null（各语法用自己的默认）。写错 → 抛错，clip.js 拒绝启动
+  dark: p => PAL.lum(p.bg) < 0.2,                                                            // Палітри з темним тлом: ink / navy / chalk.
+  on: (bg, cands) => cands.reduce((best, c) => PAL.contrast(bg, c) > PAL.contrast(bg, best) ? c : best),   // Найчитабельніший колір тексту поверх bg.
+  // spec.theme → повні 6 ключів і name. null / {} → null: кожна мова використовує типові кольори. Помилка → виняток, clip.js відмовляється запускатися.
   resolve(theme) {
     if (theme == null || (typeof theme === 'object' && !Array.isArray(theme) && !Object.keys(theme).length)) return null;
     const avail = `可用：${PAL.names().join(' / ')}`;

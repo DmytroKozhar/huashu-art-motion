@@ -19,7 +19,7 @@ ENGINE = ROOT / 'scripts' / 'engine'
 EX = ENGINE / 'examples'
 W = {}
 
-# 在一张空页里加载 lib/palettes.js，逐个调用 PAL.resolve，结果（或报错信息）按 JSON 打出来
+# Завантажуємо lib/palettes.js на порожній сторінці, по черзі викликаємо PAL.resolve й виводимо результати (або помилки) у JSON.
 RESOLVE = r'''
 import json, sys
 from playwright.sync_api import sync_playwright
@@ -62,7 +62,7 @@ def absolutize(spec):
 
 
 def ex(name):
-    if name == 'y4_storytime':   # 样例里的帧库是占位路径；测试用作者本人的帧（只给测试用，见 fixtures 里的说明）
+    if name == 'y4_storytime':   # Шляхи бібліотеки кадрів у прикладах — заповнювачі; тести використовують кадри самого автора (лише для тестів, див. пояснення у fixtures).
         return json.loads((ROOT / 'tests' / 'fixtures' / 'y4_storytime_test_frames.json').read_text(encoding='utf-8'))
     return json.loads((EX / f'{name}.json').read_text(encoding='utf-8'))
 
@@ -86,7 +86,7 @@ def setUpModule():
         't3_override': render({**t3, 'theme': {'name': 'snow', 'bg': '#102030'}}, tmp / 't3_override', [6.5]),
         'y1_default': render({k: v for k, v in ex('y1_kurzgesagt').items() if k != 'theme'}, tmp / 'y1_default', [0.2]),
         'bad_name': render({**t3, 'theme': 'purple'}, tmp / 'bad_name', [1]),
-        'bad_obj': render({**ex('y5_kinetic_type'), 'theme': {'bg': '#000000', 'ink': '#ffffff'}}, tmp / 'bad_obj', [1]),   # t3 把这种对象当旧主题写法，换 y5 测
+        'bad_obj': render({**ex('y5_kinetic_type'), 'theme': {'bg': '#000000', 'ink': '#ffffff'}}, tmp / 'bad_obj', [1]),   # t3 сприймає такий об’єкт як старий синтаксис теми; тестуємо на y5.
         't3_legacy_obj': render({**t3, 'theme': {'bg': '#000000', 'ink': '#ffffff'}}, tmp / 't3_legacy_obj', [6.5]),
         'y4_none': render({k: v for k, v in y4.items() if k != 'data'}, tmp / 'y4_none', [1]),
         'y4_preset': render({**y4, 'data': {'character': 'neutral'}}, tmp / 'y4_preset', [1]),
@@ -115,12 +115,12 @@ class Resolve(unittest.TestCase):
     def test_name_plus_override_fills_from_that_palette(self):
         r = W['resolve'][1]['ok']
         self.assertEqual(r['accent'], '#ABCDEF')
-        self.assertEqual(r['bg'], '#121417')                              # 其余键来自 ink 那套
+        self.assertEqual(r['bg'], '#121417')                              # Решта ключів із набору ink.
         self.assertEqual(r['accent2'], '#5FB3A1')
 
     def test_full_object_without_name_is_accepted(self):
         r = W['resolve'][2]['ok']
-        self.assertEqual(r['bg'], '#000000')                              # #rgb 规整成 #RRGGBB
+        self.assertEqual(r['bg'], '#000000')                              # Нормалізація #rgb до #RRGGBB
         self.assertEqual(r['accent2'], '#00FF00')
 
     def test_unknown_name_lists_available(self):

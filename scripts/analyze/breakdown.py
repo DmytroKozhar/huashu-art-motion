@@ -37,13 +37,13 @@ def frames(w, h, fmt='rgb24'):
     c = 3 if fmt == 'rgb24' else 1
     return np.frombuffer(raw, np.uint8).reshape(-1, h, w, c) if c == 3 else np.frombuffer(raw, np.uint8).reshape(-1, h, w)
 
-# 1) 逐帧差
+# 1) Різниця послідовних кадрів
 g = frames(192, 108, 'gray').astype(np.float32)
 d = np.abs(np.diff(g, axis=0)).mean(axis=(1, 2)); np.save(out / 'diff.npy', d)
 starts = []
 for i in range(1, len(d)):
     if d[i] > a.thresh and d[i - 1] <= a.thresh and (not starts or i - starts[-1] > a.debounce): starts.append(i)
-# 网格拟合：找「大部分起点都落在 t0+k·step 上」的最大 step（容差 1.5 帧，允许 20% 离群——镜内大动作会被误检成转场）
+# Підбір сітки: найбільший step, за якого більшість початків лежить на t0+k·step (допуск 1.5 кадру, до 20% викидів: великий рух усередині плану може помилково визначатися як перехід).
 grid = None
 if len(starts) >= 4:
     S_ = np.array(starts, float); best = None
@@ -51,7 +51,7 @@ if len(starts) >= 4:
         for t0 in S_[:3]:
             k = np.round((S_ - t0) / step); res = S_ - (t0 + k * step); inl = np.abs(res) <= 1.5
             if inl.mean() < 0.8: continue
-            t0f = t0 + res[inl].mean(); res = S_ - (t0f + k * step); score = (step, inl.sum())   # 先要最大步长（小步长能硬凑任何点）
+            t0f = t0 + res[inl].mean(); res = S_ - (t0f + k * step); score = (step, inl.sum())   # Спершу шукаємо найбільший крок (малий можна підігнати під будь-які точки).
             if best is None or score > best[0]: best = (score, step, t0f, k.astype(int).tolist(), np.abs(res[inl]).max(), (~inl).nonzero()[0].tolist())
     if best:
         _, step, t0, k, e, outl = best
@@ -60,7 +60,7 @@ if len(starts) >= 4:
 json.dump({'fps': FPS, 'size': [W, H], 'cuts_frames': starts, 'cuts_sec': [round(s / FPS, 3) for s in starts], 'grid': grid}, open(out / 'cuts.json', 'w'), indent=1, ensure_ascii=False)
 print('转场起点(秒):', [round(s / FPS, 3) for s in starts]); print('网格:', grid)
 
-# 2) 4fps 接触表
+# 2) Контактний аркуш 4fps
 small = frames(480, 270)
 step4 = max(1, round(FPS / 4)); idx = list(range(0, len(small), step4))
 for p in range(0, len(idx), 30):
@@ -70,7 +70,7 @@ for p in range(0, len(idx), 30):
         x, y = (i % 6) * 480, (i // 6) * 288; S.paste(Image.fromarray(small[f]), (x, y + 18)); dr.text((x + 4, y + 3), f'{f / FPS:.2f}s', fill='black')
     S.save(out / f'sheet_{p // 30}.jpg', quality=85)
 
-# 3) 每个转场的接触表
+# 3) Контактний аркуш кожного переходу
 (out / '转场').mkdir(exist_ok=True)
 mid = frames(384, 216)
 for n, s in enumerate(starts):
@@ -80,7 +80,7 @@ for n, s in enumerate(starts):
         x, y = (i % 5) * 384, (i // 5) * 230; S.paste(Image.fromarray(mid[f]), (x, y + 14)); dr.text((x + 3, y + 1), f'f{f} {f / FPS:.3f}s', fill='black')
     S.save(out / '转场' / f'T{n + 1:02d}.jpg', quality=85)
 
-# 4) 运动热图 + 5) 参考帧
+# 4) Теплова карта руху + 5) Еталонні кадри
 (out / '镜内运动').mkdir(exist_ok=True); (out / 'ref').mkdir(exist_ok=True)
 bounds = [0] + starts + [len(small)]
 heat, keys = [], []

@@ -1,10 +1,10 @@
-// 发布会式界面 UI：渐变光斑底（mesh gradient 近似）、毛玻璃卡片、伪 3D 透视（切片）、光扫过（sheen）、只画影子的投影、线性图标。
-// 约定：坐标是 1920×1080 屏幕坐标；所有动画参数由调用方用时间算好传进来，本库不读时钟。
-// 卡片展开成全屏、模糊推进是转场（transitions.js 的 expandRect / blurPush）。
-// 坑：blur 会从画布外拉进透明像素——画进不清空的离屏会逐帧累积（qa 确定性 ✗），所以先铺原图再叠模糊版；
-//     切片透视的条带取整像素首尾相接，别用「重叠 0.75px 防缝」，半透明下重叠处出竖纹。
+// Інтерфейс UI у стилі презентацій: тло з градієнтними світловими плямами (наближення mesh gradient), картки з матового скла, псевдо-3D перспектива (смуги), світловий відблиск (sheen), окреме малювання тіні без об’єкта та лінійні піктограми.
+// Домовленості: координати екрана 1920×1080; усі параметри анімації викликач обчислює за часом і передає сюди; бібліотека не зчитує годинник.
+// Розгортання картки на весь екран і наближення з розмиттям — це переходи (expandRect / blurPush у transitions.js).
+// Пастка: blur підтягує прозорі пікселі з-за меж полотна; при малюванні на позаекранному полотні без очищення результат накопичується з кожним кадром (детермінованість qa ✗), тому спершу кладемо оригінал, а поверх — розмиту версію;
+//     смуги перспективного перетворення стикуємо на цілих пікселях; не використовуйте «перекриття 0.75px проти щілин»: за напівпрозорості воно утворює вертикальні смуги.
 (() => {
-let W = 1920, H = 1080; U.onStage((w, h) => { W = w; H = h; });   // 画布尺寸跟 U.setStage 走（默认 1920×1080）
+let W = 1920, H = 1080; U.onStage((w, h) => { W = w; H = h; });   // Розмір полотна задає U.setStage (типово 1920×1080)
 const { clamp, lerp } = U;
 const UI = window.UI = {};
 const cvs = {};
@@ -14,9 +14,9 @@ UI.scratch = scratch;
 UI.rr = (c, x, y, w, h, r) => { c.beginPath(); c.roundRect(x, y, w, h, r); };
 UI.rrPath = (x, y, w, h, r) => { const p = new Path2D(); p.roundRect(x, y, w, h, r); return p; };
 
-// ---------- 渐变光斑底（mesh gradient 的廉价近似） ----------
-// 小画布上画几团径向渐变（screen 叠加）→ 小画布上模糊 → 放大铺满 → 叠静态颗粒防色带。
-// blobs: [{x,y,r,col:[r,g,b],a, ax,ay,period,ph}]  位置单位是屏幕像素，ax/ay 漂移振幅，period 秒
+// ---------- Тло з градієнтними світловими плямами (дешеве наближення mesh gradient) ----------
+// На малому полотні малюємо кілька радіальних градієнтів (накладання screen) → розмиваємо на малому полотні → збільшуємо на все тло → додаємо статичне зерно проти смугастості градієнта.
+// blobs: [{x,y,r,col:[r,g,b],a, ax,ay,period,ph}]  Позиція в екранних пікселях, ax/ay — амплітуди дрейфу, period — секунди
 UI.mesh = (c, t, { base = '#05060a', blobs = [], blur = 40, scale = 0.25, grain = 0.04, key = 'mesh' } = {}) => {
   const sw = Math.round(W * scale), sh = Math.round(H * scale);
   const a = scratch(key + 'a', sw, sh), g = a.getContext('2d');
@@ -31,53 +31,53 @@ UI.mesh = (c, t, { base = '#05060a', blobs = [], blur = 40, scale = 0.25, grain 
     g.fillStyle = gr; g.fillRect(0, 0, sw, sh);
   }
   const bb = scratch(key + 'b', sw, sh), gb = bb.getContext('2d');
-  // 先铺不模糊的原图再叠模糊版：blur 会从画布外拉进透明像素，边缘半透明——画进不清空的离屏会逐帧累积（qa 确定性 ✗ 就是这么来的）
+  // Спершу кладемо нерозмитий оригінал, поверх — розмиту версію: blur підтягує прозорі пікселі з-за меж полотна, роблячи краї напівпрозорими; на позаекранному полотні без очищення вони накопичуються з кожним кадром (саме так порушується детермінованість qa ✗)
   gb.clearRect(0, 0, sw, sh); gb.drawImage(a, 0, 0); gb.filter = `blur(${blur * scale}px)`; gb.drawImage(a, 0, 0); gb.filter = 'none';
   c.save(); c.imageSmoothingQuality = 'high'; c.drawImage(bb, 0, 0, W, H);
   if (grain) { c.globalAlpha = grain; c.drawImage(UI.grainTex(), 0, 0); }
   c.restore();
 };
-// 静态颗粒（种子固定）：对抗 8bit 视频编码里大面积渐变的色带
+// Статичне зерно (фіксоване початкове зерно генератора): проти смугастості великих градієнтів у 8-бітному відеокодуванні
 UI.grainTex = () => PAINT.cached('gl_grain' + W + 'x' + H, W, H, (g) => {
   const r = U.rng(77), im = g.createImageData(W, H), d = im.data;
   for (let i = 0; i < d.length; i += 4) { const v = r() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
   g.putImageData(im, 0, 0);
 });
 
-// ---------- 背景的模糊副本（毛玻璃取样用） ----------
+// ---------- Розмита копія тла (для вибірки матового скла) ----------
 UI.backdrop = (src, { scale = 0.25, blur = 28, key = 'bd' } = {}) => {
   const sw = Math.round(W * scale), sh = Math.round(H * scale);
   const a = scratch(key, sw, sh), g = a.getContext('2d');
-  g.clearRect(0, 0, sw, sh); g.drawImage(src, 0, 0, sw, sh); g.filter = `blur(${blur * scale}px)`; g.drawImage(src, 0, 0, sw, sh); g.filter = 'none';   // 同上：先垫原图防边缘透明
+  g.clearRect(0, 0, sw, sh); g.drawImage(src, 0, 0, sw, sh); g.filter = `blur(${blur * scale}px)`; g.drawImage(src, 0, 0, sw, sh); g.filter = 'none';   // Як вище: спершу підкладаємо оригінал, щоб краї не стали прозорими
   return a;
 };
 
-// ---------- 阴影（只画影子，不画形状本身：形状移到屏外，影子偏移回来） ----------
+// ---------- Тіні (малюємо лише тінь, без самої фігури: фігуру виносимо за екран, тінь зсуваємо назад) ----------
 UI.shadow = (c, x, y, w, h, r, { blur = 60, oy = 28, alpha = 0.45 } = {}) => {
   c.save(); c.shadowColor = `rgba(0,0,0,${alpha})`; c.shadowBlur = blur; c.shadowOffsetX = 4000; c.shadowOffsetY = oy;
   c.fillStyle = '#000'; UI.rr(c, x - 4000, y, w, h, r); c.fill(); c.restore();
 };
 
-// ---------- 毛玻璃卡片 ----------
-// bd = UI.backdrop(...) 的结果；sample = 取样的屏幕矩形（默认与卡片同位，卡片画进离屏纹理时要传屏幕位置）
+// ---------- Картки з матового скла ----------
+// bd = результат UI.backdrop(...); sample = екранний прямокутник для вибірки (типово збігається з положенням картки; при малюванні картки в позаекранну текстуру слід передати її екранне положення)
 UI.glass = (c, { x, y, w, h, r = 28, bd, sample, tint = 0.07, stroke = 0.22, light = 0.16, shadow = true }) => {
   if (shadow) UI.shadow(c, x, y, w, h, r, { blur: 70, oy: 30, alpha: 0.5 });
   c.save(); UI.rr(c, x, y, w, h, r); c.clip();
   if (bd) { const s = bd.width / W, S = sample || { x, y, w, h }; c.drawImage(bd, S.x * s, S.y * s, S.w * s, S.h * s, x, y, w, h); }
   c.fillStyle = `rgba(255,255,255,${tint})`; c.fillRect(x, y, w, h);
-  // 顶部受光：上缘一道柔和亮带（玻璃的厚度感）
+  // Освітлення згори: м’яка світла смуга вздовж верхнього краю (відчуття товщини скла)
   const g = c.createLinearGradient(0, y, 0, y + h * 0.5); g.addColorStop(0, `rgba(255,255,255,${light})`); g.addColorStop(1, 'rgba(255,255,255,0)');
   c.fillStyle = g; c.fillRect(x, y, w, h * 0.5);
   c.restore();
-  // 1px 描边：左上亮、右下暗（光从左上来）
+  // Обводка 1px: світла зліва вгорі, темна справа внизу (світло падає зліва згори)
   c.save(); const sg = c.createLinearGradient(x, y, x + w, y + h);
   sg.addColorStop(0, `rgba(255,255,255,${stroke * 1.8})`); sg.addColorStop(0.5, `rgba(255,255,255,${stroke * 0.5})`); sg.addColorStop(1, `rgba(255,255,255,${stroke})`);
   c.strokeStyle = sg; c.lineWidth = 1.5; UI.rr(c, x + 0.75, y + 0.75, w - 1.5, h - 1.5, r); c.stroke(); c.restore();
 };
 
-// ---------- 光扫过（sheen） ----------
-// 在 clip 区域里让一道斜向亮带从左扫到右；p∈[0,1]；band 宽 width；angle 弧度
-// comp：默认 'lighter'（叠在画面上）；在只含文字的离屏上用 'source-atop'（光只落在字上）
+// ---------- Рухомий відблиск (sheen) ----------
+// У межах clip похила світла смуга проходить зліва направо; p∈[0,1]; ширина смуги band — width; angle — у радіанах
+// comp: типово 'lighter' (накладання на зображення); на позаекранному полотні лише з текстом використовуйте 'source-atop' (світло лягає тільки на літери)
 UI.sheen = (c, clipPath, p, { x0 = 0, x1 = W, width = 260, angle = -0.35, alpha = 0.32, col = '255,255,255', comp = 'lighter' } = {}) => {
   if (p <= 0 || p >= 1) return;
   const cx = lerp(x0 - width * 2, x1 + width * 2, p);
@@ -90,11 +90,11 @@ UI.sheen = (c, clipPath, p, { x0 = 0, x1 = W, width = 260, angle = -0.35, alpha 
   c.restore();
 };
 
-// ---------- 伪 3D：把一张纹理绕 Y 轴（竖条切片）或 X 轴（横条切片）转 ----------
-// tex: 卡片纹理（任意分辨率），屏幕中心 cx,cy，屏幕尺寸 w×h（未旋转时），ry/rx 弧度，persp 透视距离（px）
-// 远侧变暗 shade（0..1），模拟侧光。条宽 strip px。
-// 切片边界取整像素、首尾相接（不重叠也不留缝）：重叠 0.75px 防缝的老办法，在半透明纹理/半透明绘制下重叠处透明度叠加，出一条条竖纹横纹。
-// 另外先画进离屏再整体按 alpha 贴回，整卡淡入淡出时也不出纹。
+// ---------- Псевдо-3D: обертання текстури навколо осі Y (вертикальні смуги) або X (горизонтальні смуги) ----------
+// tex: текстура картки (довільної роздільності), центр на екрані cx,cy, екранний розмір w×h (до обертання), ry/rx — радіани, persp — перспективна відстань (px)
+// Затемнення дальнього боку shade (0..1) імітує бічне освітлення. Ширина смуги — strip px.
+// Межі смуг округлюються до цілих пікселів і стикуються без перекриття та щілин: старий спосіб із перекриттям 0.75px проти щілин підсумовує непрозорість у місцях перекриття напівпрозорих текстур/малювання та утворює вертикальні й горизонтальні смуги.
+// Крім того, спершу малюємо поза екраном, потім накладаємо все цілком із alpha, щоб поступова поява й зникнення картки також не давали смуг.
 UI.persp = (c0, tex, { cx, cy, w, h, ry = 0, rx = 0, persp = 1600, strip = 3, shade = 0.35, alpha = 1 }) => {
   const sc = scratch('persp', W, H), c = sc.getContext('2d'); c.reset();
   c.save();
@@ -106,7 +106,7 @@ UI.persp = (c0, tex, { cx, cy, w, h, ry = 0, rx = 0, persp = 1600, strip = 3, sh
       const u0 = i / n, u1 = (i + 1) / n, [x0, s0] = P(u0), [x1, s1] = P(u1), s = (s0 + s1) / 2;
       const hh = h * s, xa = Math.round(Math.min(x0, x1)), xb = Math.round(Math.max(x0, x1)); if (xb > xa) c.drawImage(tex, u0 * tw, 0, (u1 - u0) * tw, th, xa, cy - hh / 2, xb - xa, hh);
     }
-    if (shade && ry) { // 转离观众的一侧暗一点
+    if (shade && ry) { // Трохи затемнюємо бік, повернутий від глядача
       const [xa] = P(0), [xb] = P(1), g = c.createLinearGradient(xa, 0, xb, 0), k = Math.min(1, Math.abs(Math.sin(ry)) * 2) * shade;
       g.addColorStop(0, `rgba(0,0,0,${ry > 0 ? 0 : k})`); g.addColorStop(1, `rgba(0,0,0,${ry > 0 ? k : 0})`);
       c.globalCompositeOperation = 'source-atop'; c.fillStyle = g; c.fillRect(Math.min(xa, xb), cy - h, Math.abs(xb - xa), h * 2);
@@ -123,15 +123,15 @@ UI.persp = (c0, tex, { cx, cy, w, h, ry = 0, rx = 0, persp = 1600, strip = 3, sh
   c0.save(); c0.globalAlpha *= alpha; c0.drawImage(sc, 0, 0); c0.restore();
 };
 
-// ---------- 线性图标（SF Symbols 气质：圆头、等线宽） ----------
+// ---------- Лінійні піктограми (у дусі SF Symbols: округлі кінці, однакова товщина ліній) ----------
 UI.icon = (c, kind, x, y, s, col, t = 0, lw = 0.075) => {
   c.save(); c.translate(x, y); c.scale(s, s); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round';
-  if (kind === 'wave') {                    // 语音：5 根会跳的竖条
+  if (kind === 'wave') {                    // Голос: 5 вертикальних смужок, що підстрибують
     const hs = [0.35, 0.7, 1, 0.6, 0.3];
     hs.forEach((h0, i) => { const h = h0 * (0.75 + 0.25 * Math.sin(t * 7 + i * 1.3)); const xx = -0.4 + i * 0.2; c.beginPath(); c.moveTo(xx, -h * 0.45); c.lineTo(xx, h * 0.45); c.stroke(); });
-  } else if (kind === 'memory') {           // 记忆：三层叠片
+  } else if (kind === 'memory') {           // Пам’ять: три накладені шари
     for (let k = 0; k < 3; k++) { const yy = -0.28 + k * 0.24 + 0.02 * Math.sin(t * 2 + k); c.beginPath(); c.moveTo(-0.45, yy); c.lineTo(0, yy - 0.18); c.lineTo(0.45, yy); c.lineTo(0, yy + 0.18); c.closePath(); c.globalAlpha = k === 0 ? 1 : 0.6; c.stroke(); }
-  } else if (kind === 'agent') {            // 智能体：四角星 + 小星
+  } else if (kind === 'agent') {            // Агент: чотирипроменева зірка + маленька зірка
     const r = 0.42 * (1 + 0.05 * Math.sin(t * 3));
     c.beginPath(); c.moveTo(0, -r); c.quadraticCurveTo(0, 0, r, 0); c.quadraticCurveTo(0, 0, 0, r); c.quadraticCurveTo(0, 0, -r, 0); c.quadraticCurveTo(0, 0, 0, -r); c.fill();
     const r2 = 0.16; c.translate(0.36, -0.36); c.beginPath(); c.moveTo(0, -r2); c.quadraticCurveTo(0, 0, r2, 0); c.quadraticCurveTo(0, 0, 0, r2); c.quadraticCurveTo(0, 0, -r2, 0); c.quadraticCurveTo(0, 0, 0, -r2); c.globalAlpha = 0.7; c.fill();

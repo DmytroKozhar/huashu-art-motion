@@ -32,7 +32,7 @@ CLIPS = {
 }
 
 W = {}
-ENV = dict(os.environ, FILM_GATE_MIN_S='20')   # 别的测试模块会把它设成 0；这里要的就是默认的短片降级
+ENV = dict(os.environ, FILM_GATE_MIN_S='20')   # Інші тестові модулі встановлюють 0; тут потрібне типове зниження суворості для коротких роликів.
 
 
 def setUpModule():

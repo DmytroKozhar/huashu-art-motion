@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location("storyboard_lint", SCRIPT)
 SL = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SL)
 
-# 一个白板片段从头撑到尾：标题开场、要点逐条出现、一镜十几秒、同一个片段 60 秒。
+# Один фрагмент білої дошки від початку до кінця: вступ із заголовком, послідовна поява тез, понад десять секунд на план, той самий фрагмент 60 секунд.
 WALL = """# 镜头表
 
 | 时间段 | 画面里的物 | 它在做什么 | 镜头 | 屏上字 | 做法 |
@@ -40,7 +40,7 @@ class TemplateExample(unittest.TestCase):
         self.assertGreaterEqual(res["total"], 45)
 
     def test_blank_template_in_code_block_is_skipped(self):
-        # 模板里的空表在代码块里，lint 只认示例那张。
+        # Порожня таблиця шаблону в блоці коду; lint розпізнає лише таблицю прикладу.
         res = SL.lint(TEMPLATE.read_text(encoding="utf-8"))
         self.assertTrue(res["rows"][0]["obj"].startswith("小满"))
 
@@ -61,7 +61,7 @@ class BulletWall(unittest.TestCase):
         red = tags(self.res, SL.RED)
         for t in ("①物", "②做什么", "③屏上字", "④开头", "⑤文字占比", "⑥时长", "做法"):
             self.assertIn(t, red, "\n".join(SL.report(self.res)))
-        self.assertIn("镜头", tags(self.res, SL.YELLOW))   # 全是「停」：⑦不报（停可以连着），整表报「没有任何镜头动作」
+        self.assertIn("镜头", tags(self.res, SL.YELLOW))   # Усюди «停» (зупинка): ⑦ не спрацьовує (статичні плани можуть іти поспіль), але для всієї таблиці повідомляється відсутність будь-якого руху камери.
 
     def test_points_appearing_is_not_an_action(self):
         r = self.res["rows"][1]
@@ -204,7 +204,7 @@ class TagsColumn(unittest.TestCase):
         self.assertEqual(res["rows"][0]["tags"], 4)
         self.assertIn((SL.YELLOW, "⑩标签"), {(lv, t) for lv, t, *_ in res["rows"][0]["issues"]})
         self.assertFalse(any(t == "⑩标签" for _, t, *_ in res["rows"][1]["issues"]))
-        self.assertEqual(res["rows"][0]["text"], "轻")          # 标签列不会被当成屏上字
+        self.assertEqual(res["rows"][0]["text"], "轻")          # Колонка міток не вважається екранним текстом.
 
     def test_tag_count(self):
         self.assertEqual(SL.tag_count("快 · 省 · 稳 · 准"), 4)
@@ -256,7 +256,7 @@ class StyleLock(unittest.TestCase):
         self.assertIn("⑬色板", {t for t, _ in self.red(res)})
         res = self.lint("画风：赛博朋克\n色板：#2A1A6E #FF3EA5 #0B0B12\n角色：无\n允许蓝紫：用户点名要赛博朋克紫\n\n")
         self.assertNotIn("⑬色板", {t for t, _ in self.red(res)})
-        res = self.lint("画风：海军蓝平涂\n色板：#0D1B2A #16293D #EEF3F6 #5CC8E0\n角色：无\n\n")   # 海军蓝色相约 210°，不算
+        res = self.lint("画风：海军蓝平涂\n色板：#0D1B2A #16293D #EEF3F6 #5CC8E0\n角色：无\n\n")   # Відтінок темно-синього близько 210°, не враховується.
         self.assertNotIn("⑬色板", {t for t, _ in self.red(res)})
 
     def test_code_drawn_character(self):
@@ -303,7 +303,7 @@ class CameraRhythm(unittest.TestCase):
     def test_holds_can_repeat(self):
         self.assertNotIn("⑦镜头", self.issues(self.lint(["停", "停", "停", "缓推", "拉远", "横移"])))
         self.assertIn("⑦镜头", self.issues(self.lint(["快推", "快推", "快推", "横移", "拉远", "停"])))
-        self.assertNotIn("⑦镜头", self.issues(self.lint(["横移", "横移", "横移", "缓推", "拉远", "停"])))   # 调查桌一件件横移
+        self.assertNotIn("⑦镜头", self.issues(self.lint(["横移", "横移", "横移", "缓推", "拉远", "停"])))   # Бічний рух між предметами на столі розслідування
 
     def test_inward_synonyms(self):
         self.assertIn("⑮推近", self.issues(self.lint(["慢推", "推进", "zoom in", "停", "拉远", "横移"])))

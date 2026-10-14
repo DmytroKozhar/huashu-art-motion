@@ -50,14 +50,14 @@ ap.add_argument('--sub-band', type=float, default=None, help='字幕带上沿（
 a = ap.parse_args()
 if not (a.project or a.spec): ap.error('--project 或 --spec 二选一')
 spec, ALLOWED = None, set()
-if a.spec:                                                 # 和 render.py 同一套：本地素材（image / frames / 角色帧库）只服务 spec 里点名的文件
+if a.spec:                                                 # Ті самі правила, що в render.py: локальні матеріали (image / frames / бібліотека кадрів персонажів) надаються лише для файлів, названих у spec.
     sp = Path(a.spec).resolve(); spec = json.loads(sp.read_text())
     try: spec_assets.localize(spec, sp.parent, ALLOWED)
     except FileNotFoundError as e: raise SystemExit(str(e))
 root = Path(a.project).resolve() if a.project else Path(__file__).resolve().parent / 'engine'
 out = Path(a.out) if a.out else (Path(a.spec).resolve().parent / 'qa' if a.spec else root.parent / 'qa'); out.mkdir(parents=True, exist_ok=True)
 VW, VH = (spec.get('width', 1920), spec.get('height', 1080)) if spec else (1920, 1080)
-if a.sub_band is None:   # 片段给管线用：字幕让位写在 spec 的 safe.bottom 里，没写就当没有烧录字幕
+if a.sub_band is None:   # Фрагменти для конвеєра: відступ для субтитрів задано в safe.bottom у spec; якщо його немає, вважаємо, що вбудованих субтитрів немає.
     sb = ((spec or {}).get('safe') or {}).get('bottom', 0) if spec else None
     a.sub_band = 0.852 if sb is None else (1 - sb / VH if sb else 0)
 
@@ -76,7 +76,7 @@ class LocalServer(socketserver.ThreadingTCPServer):
 srv = LocalServer(('127.0.0.1', 0), functools.partial(Q, directory=str(root))); port = srv.server_address[1]
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-# 框景检查：包一层 fillText/strokeText，记下画在「整屏大小的画布」上的字的屏幕外框（经过当前变换）
+# Перевірка кадрування: обгортаємо fillText/strokeText і записуємо екранні межі тексту, намальованого на повноекранному полотні, з урахуванням поточного перетворення.
 TEXT_HOOK = '''(() => {
   // 字的外框记在「它被画上的那张画布」上；这张画布被 drawImage 贴到别处时，外框跟着变换过去。
   // 这样先画进离屏缓冲再整体推镜（讲解员片的位图推镜）、画进精灵缓存再贴上桌（Vox 的剪纸）的字也量得到。
@@ -152,24 +152,24 @@ def frame_issues(tb, band):
         x0, y0, x1, y1 = min(cxs), min(cys), max(cxs), max(cys)
         ang = float(np.arctan2((cys[1] - cys[0]) * VH, (cxs[1] - cxs[0]) * VW))
         w, h = x1 - x0, y1 - y0
-        if w <= 0 or h <= 0 or h < 0.008: continue                 # 太小的字（<9px）不管
+        if w <= 0 or h <= 0 or h < 0.008: continue                 # Надто дрібний текст (<9px) ігноруємо.
         ix0, iy0, ix1, iy1 = max(x0, 0), max(y0, 0), min(x1, 1), min(y1, 1)
-        if ix1 <= ix0 or iy1 <= iy0: continue                      # 整个在画外：镜头没拍到，不算
+        if ix1 <= ix0 or iy1 <= iy0: continue                      # Повністю поза кадром: камера цього не бачить, не враховуємо.
         frac = (ix1 - ix0) * (iy1 - iy0) / (w * h)
         if frac < 0.9 and frac > 0.1: out.append(('半截字', txt))
         if band and iy1 > band + 0.004 and frac > 0.1: out.append(('进字幕带', txt))
         if not clipped: vis.append((txt, ang, cxs, cys))
-    def box(v, ang):                                                    # 转到 ang 的坐标系里取外框：斜放标签的两行字不会因外接框变大而互相「重叠」
+    def box(v, ang):                                                    # Обчислюємо рамку в системі координат ang: два рядки нахиленої мітки не «перекриваються» через збільшену обмежувальну рамку.
         c, s_ = np.cos(-ang), np.sin(-ang)
         u = [x * c - y * s_ * VH / VW for x, y in zip(v[2], v[3])]; w = [x * s_ * VW / VH + y * c for x, y in zip(v[2], v[3])]
         return min(u), min(w), max(u), max(w)
     for i in range(len(vis)):
         for j in range(i + 1, len(vis)):
             a, b = vis[i], vis[j]
-            if a[0] == b[0]: continue                                   # 同一串字画两遍（描边＋填色、投影）
+            if a[0] == b[0]: continue                                   # Той самий текст намальовано двічі (обведення + заливка, тінь).
             same = abs(a[1] - b[1]) < 0.02; ang = a[1] if same else 0.0
             A, B = box(a, ang), box(b, ang)
-            if not same:                                                # 角度不同（手写字逐字抖动）：外接框会胖一圈，各自内缩 12% 再比
+            if not same:                                                # Різні кути (тремтіння окремих рукописних літер) розширюють рамки; перед порівнянням стискаємо кожну на 12%.
                 A, B = [(r[0] + (r[2] - r[0]) * .12, r[1] + (r[3] - r[1]) * .12, r[2] - (r[2] - r[0]) * .12, r[3] - (r[3] - r[1]) * .12) for r in (A, B)]
             ow = min(A[2], B[2]) - max(A[0], B[0]); oh = min(A[3], B[3]) - max(A[1], B[1])
             if ow <= 0 or oh <= 0: continue
@@ -206,7 +206,7 @@ def near_blank(f):
     """和画面主色差 >24 的像素占比 <0.3% 读作「几乎没有内容」。"""
     med = np.median(f.reshape(-1, 3), axis=0)
     return float((np.abs(f - med).max(axis=2) > 24).mean()) < 0.003
-def img(b64, w=480): return np.asarray(Image.open(io.BytesIO(base64.b64decode(b64))).convert('RGB').resize((w, round(w * VH / VW)))).astype(np.int16)   # 按画幅缩，竖屏不压扁
+def img(b64, w=480): return np.asarray(Image.open(io.BytesIO(base64.b64decode(b64))).convert('RGB').resize((w, round(w * VH / VW)))).astype(np.int16)   # Масштабуємо зі збереженням пропорцій, не сплющуємо вертикальний кадр.
 
 def camera_events(frames, diffs, idx, fps, max_s=2.0):
     """把跳变里的镜头动作（推拉、横移、砸入）挑出来（判据见文件头第 4 条）。idx：跳变所在的帧对下标。返回 (还算跳变的下标, 镜头事件 [(l, r)])。"""
@@ -217,8 +217,8 @@ def camera_events(frames, diffs, idx, fps, max_s=2.0):
         while l > 0 and diffs[l - 1] > thr: l -= 1
         while r < len(diffs) - 1 and diffs[r + 1] > thr: r += 1
         n = r - l + 1
-        far = [float(np.abs(frames[k] - frames[l]).mean()) for k in range(l + 1, r + 2)]   # 这一串里每一帧离第一帧多远
-        smooth = n <= 0.35 * fps + 1 or all(diffs[k] <= 2.5 * max(diffs[k - 1], diffs[k + 1]) + 0.5 for k in range(l + 1, r))   # 长于 0.35s 的要一路平滑，中间不许有单帧尖峰
+        far = [float(np.abs(frames[k] - frames[l]).mean()) for k in range(l + 1, r + 2)]   # Відстань кожного кадру цієї послідовності від першого
+        smooth = n <= 0.35 * fps + 1 or all(diffs[k] <= 2.5 * max(diffs[k - 1], diffs[k + 1]) + 0.5 for k in range(l + 1, r))   # Рух довше 0.35s має бути плавним увесь час, без однокадрових піків.
         if 2 <= n <= max_s * fps + 1 and far[-1] >= 0.8 * max(far) and smooth: events.append((l, r))
         else: keep.append(i)
     return [i for i in keep if not any(l <= i <= r for l, r in events)], events
@@ -229,7 +229,7 @@ with sync_playwright() as p:
     br = p.chromium.launch(args=['--enable-gpu-rasterization', '--ignore-gpu-blocklist'])
     pg = br.new_page(viewport={'width': VW, 'height': VH})
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.on('console', lambda m: errors.append('console.error: ' + m.text) if m.type == 'error' else None)   # 缺字形等由 console.error 报出
+    pg.on('console', lambda m: errors.append('console.error: ' + m.text) if m.type == 'error' else None)   # Відсутні гліфи тощо повідомляються через console.error.
     pg.add_init_script(TEXT_HOOK)
     if spec:
         pg.add_init_script('window.CLIP_SPEC = ' + json.dumps(spec, ensure_ascii=False) + ';')
@@ -248,7 +248,7 @@ with sync_playwright() as p:
         lt1 = max(lt0 + 0.2, dur - 0.02)
         n = max(4, int((lt1 - lt0) * a.fps))
         ts = [lt0 + (lt1 - lt0) * i / (n - 1) for i in range(n)]
-        full = bool(spec)                                   # 片段没有 renderSolo，整帧渲
+        full = bool(spec)                                   # У фрагмента немає renderSolo: рендеримо весь кадр.
         cold_ms, cold, _ = pg.evaluate(GRAB, [s['id'], ts[-1], full])
         frames, ms, tbs = [], [], []
         for t in ts:
@@ -257,7 +257,7 @@ with sync_playwright() as p:
         det = int(np.abs(img(again) - frames[-1]).max()); det_cold = int(np.abs(img(cold) - frames[-1]).max())
         diffs = np.array([(np.abs(frames[i + 1] - frames[i]).max(axis=2) > 12).mean() * 100 for i in range(len(frames) - 1)])
         med = float(np.median(diffs)) if len(diffs) else 0
-        if spec:   # 片段多是「动一下、定住」：全段中位数≈0，连续的推镜/滑入会整串被记成跳变。片段只认孤立的跳：比前后各 3 对的中位数大 6 倍
+        if spec:   # Фрагменти часто мають схему «рух і завмирання»: медіана всього фрагмента ≈0, тому безперервне наближення/в’їзд цілком сприймається як стрибок. Для фрагментів рахуємо лише ізольовані стрибки: понад 6 медіан трьох пар до й трьох пар після.
             loc = lambda i: float(np.median(np.r_[diffs[max(0, i - 3):i], diffs[i + 1:i + 4]])) if len(diffs) > 1 else 0
             sidx = [i for i, d in enumerate(diffs) if d > 3 and d > 6 * max(loc(i), 0.05)]
         else:
@@ -277,7 +277,7 @@ with sync_playwright() as p:
         rec['framing'] = [{'kind': k, 'text': txt, 'lt': [round(t0, 2), round(t1, 2)], 't': [round(s['t0'] + t0, 2), round(s['t0'] + t1, 2)]} for k, txt, t0, t1 in frame_runs]
         rec['text_tracked'] = sum(map(len, tbs))
         report['segments'].append(rec)
-        # 拼图：4 帧 + 热图
+        # Колаж: 4 кадри + теплова карта
         pick = [frames[int(k)] for k in np.linspace(0, n - 1, 4)]
         H_, W_ = frames[0].shape[:2]; S = Image.new('RGB', (W_ * 5, H_ + 20), 'white'); dr = ImageDraw.Draw(S)
         for k, f in enumerate(pick): S.paste(Image.fromarray(f.astype(np.uint8)), (k * W_, 20))
@@ -288,7 +288,7 @@ with sync_playwright() as p:
         S.save(out / f"{s['id']}.jpg", quality=85)
         print(f"{s['id']:<18} 运动 {rec['motion_pct']:>5}%  静止帧对 {rec['still_pairs_pct']:>5}%  跳变 {len(spikes)}  镜头事件 {len(cams)}  {rec['ms_mean']:>6}/{rec['ms_max']:>6}ms  确定性 {'✓' if rec['deterministic'] else '✗ ' + str(rec['det_maxdiff'])}  框景 {len(rec['framing'])}")
         for r in rec['framing']: print(f"    {r['kind']}  {r['t'][0]:.2f}–{r['t'][1]:.2f}s  {r['text']}")
-    # 转场冒烟：只查能不能渲、耗时多少，不参与运动/流畅判据
+    # Димовий тест переходів: перевіряємо лише можливість і час рендерингу, не враховуємо в критеріях руху/плавності.
     report['transitions'] = []
     for s in ([] if spec else pg.evaluate('ERAS.map(e => ({id: e.id, t0: e.t0, tr: e.transition ? {type: e.transition.type, dur: e.transition.dur, delay: e.transition.delay || 0} : null}))')):
         if not s['tr'] or (want and s['id'] not in want): continue
@@ -314,13 +314,13 @@ if fr: rows += ['', '框景线索（全片秒，持续 ≥0.3s；去看这一帧
 if report.get('transitions'): rows += ['', '转场冒烟（整帧，峰值 ms）：' + '，'.join(f"{r['type']}→{r['id']} {r['ms_max']}" for r in report['transitions'])]
 (out / 'qa.md').write_text('\n'.join(rows) + ('\n\n页面报错：\n' + '\n'.join(errors) if errors else '') + '\n')
 print('->', out / 'qa.md')
-if not spec and root != Path(__file__).resolve().parent / 'engine':   # 回流兜底（11 号第一节）：qa 是交付前必跑的，在这里提醒，不让 qa 失败
+if not spec and root != Path(__file__).resolve().parent / 'engine':   # Запобіжник зворотного перенесення (розділ 1 від 11-го): qa обов’язковий перед здачею; тут лише нагадуємо, не завершуємо qa помилкою.
     import re, time
     draft = next((d / '经验回流-草稿.md' for d in (root.parent, root.parent.parent) if (d / '经验回流-草稿.md').exists()), None)
     if not draft: print(f'回流提醒：项目根（{root.parent.name}）还没有 经验回流-草稿.md。每轮改完追加几条，格式见 skill 的 references/11-进化协议.md 第四节。')
     else:
         txt = draft.read_text(); age = (time.time() - draft.stat().st_mtime) / 60
-        tail = txt.rsplit('> 水位线', 1)[-1] if '> 水位线' in txt else txt     # 水位线以下＝还没写回 skill 的
+        tail = txt.rsplit('> 水位线', 1)[-1] if '> 水位线' in txt else txt     # Нижче контрольної позначки = ще не перенесено назад до skill.
         n = len(re.findall(r'^### \[', tail, re.M))
         print(f'回流提醒：经验回流-草稿.md 最近一次写入在 {age:.0f} 分钟前；还没写回 skill 的有 {n} 条（收活时按 11 号归宿表整合，整合完在草稿末尾加一行「> 水位线 <时间>」）。')
 if errors: raise SystemExit('❌ 页面运行时报错 %d 条，见 qa.md' % len(errors))

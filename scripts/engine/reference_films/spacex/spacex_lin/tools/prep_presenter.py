@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]; SRC = ROOT / 'assets' / 'src'; OUT =
 MIX = ROOT.parent / 'spacex' / 'assets'
 SHEETS = {p.stem[6:]: p for p in sorted(SRC.glob('sheet_*.png'))}
 SHEETS.setdefault('point', MIX / 's11_sheet_point.png')
-PRECUT = {'wow': [MIX / f's11_wow_{i}.png' for i in range(3)]}   # 混合版已切好（三帧手臂相连，按列切不开）
+PRECUT = {'wow': [MIX / f's11_wow_{i}.png' for i in range(3)]}   # Змішану версію вже розрізано (руки трьох кадрів з’єднані, поділ за колонками неможливий).
 EXPECT = {'walk': 6, 'bust': 4}
 
 
@@ -30,7 +30,7 @@ def runs(mask):
             if x - x0 > 60: out.append((x0, x))
         x += 1
     if out:
-        mw = max(b - a for a, b in out); out = [r for r in out if r[1] - r[0] >= 0.45 * mw]   # 汗珠、强调线这类碎块不算一帧
+        mw = max(b - a for a, b in out); out = [r for r in out if r[1] - r[0] >= 0.45 * mw]   # Дрібні фрагменти на кшталт крапель поту й акцентних ліній не вважаються кадром.
     return out
 
 
@@ -41,8 +41,8 @@ def crop(fr):
 
 def measure(fr):
     m = fr[..., 3] > 127; h, w = m.shape
-    bot = m[int(h * 0.94):]; xs = np.where(bot)[1]; ax = float(xs.mean()) if len(xs) else w / 2   # 脚底中心
-    white = (fr[..., :3].astype(int).min(2) > 228) & m; cnt = white.sum(1)                          # 帽顶：第一行近白像素 ≥ 40
+    bot = m[int(h * 0.94):]; xs = np.where(bot)[1]; ax = float(xs.mean()) if len(xs) else w / 2   # Центр підошви
+    white = (fr[..., :3].astype(int).min(2) > 228) & m; cnt = white.sum(1)                          # Верх капелюха: перший рядок із ≥40 майже білими пікселями
     top = int(np.argmax(cnt >= 40)) if (cnt >= 40).any() else 0
     return w, h, round(ax, 1), top
 
