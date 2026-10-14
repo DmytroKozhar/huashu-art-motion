@@ -8,7 +8,7 @@
 测试用的语法文件写在临时复制的引擎里，不进仓库。
 """
 import os
-os.environ["FILM_GATE_MIN_S"] = "0"  # 合成片只有 9 秒；这里测判定本身，不测短片降级
+os.environ["FILM_GATE_MIN_S"] = "0"  # Синтетичний ролик триває лише 9 секунд; тут перевіряємо саме рішення, а не зниження суворості для коротких роликів.
 import json
 import os
 import shutil
@@ -20,12 +20,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts'
 ENGINE = SCRIPTS / 'engine'
-_HERO = ROOT / 'assets' / 'showcase' / 'hero.png'   # 只在公开仓库里；私有版没有就用样例里的图表截图
+_HERO = ROOT / 'assets' / 'showcase' / 'hero.png'   # Є лише у відкритому репозиторії; якщо у приватній версії немає, використовуємо знімок діаграми з прикладу.
 IMAGES = [_HERO if _HERO.exists() else ROOT / 'scripts' / 'engine' / 'examples' / 'assets' / 'K线图_横屏.png',
           ROOT / 'assets' / '全风格总览.jpg', ROOT / 'assets' / '动画语法' / 'y2_vox_总览.jpg']
 SHOT = 3.0
 
-# 测试专用语法：kind=shot 的 cue 一镜一张图，满幅（MD.cover），镜头由 data.mode 决定。
+# Синтаксис лише для тестів: cue з kind=shot має одне повноекранне зображення на план (MD.cover); рух камери задає data.mode.
 PROBE = r'''
 CLIPS._gate_probe = { draw(c, t, ctx) {
   const shots = ctx.of('shot'); let i = 0;
@@ -40,7 +40,7 @@ CLIPS._gate_probe = { draw(c, t, ctx) {
 } };
 '''
 
-# 整片模式（qa --project --film gateprobe）：三段「停住→0.3 秒快推→停住」，第四段中间闪一下白。画面是种子随机的色块。
+# Режим усього ролика (qa --project --film gateprobe): три ділянки «стоп → швидке наближення 0.3 секунди → стоп», у четвертій білий спалах посередині. Зображення — випадкові кольорові блоки з фіксованим seed.
 PROBE_FILM = r'''
 const tex = (c, seed) => { const r = U.rng(seed); c.fillStyle = '#1d2330'; c.fillRect(0, 0, 1920, 1080);
   for (let i = 0; i < 600; i++) { c.fillStyle = `hsl(${r() * 360},60%,${30 + r() * 50}%)`; const s = 20 + r() * 120; c.fillRect(r() * 1920, r() * 1080, s, s * (0.3 + r())); } };
@@ -58,7 +58,7 @@ def run(*args, cwd=None):
     return subprocess.run(['uv', 'run', '--quiet', *map(str, args)], cwd=cwd, capture_output=True, text=True, timeout=900)
 
 
-W = {}   # 模块级夹具：引擎副本、spec、渲好的两支片
+W = {}   # Фікстура рівня модуля: копія рушія, spec і два відрендерені ролики.
 
 
 def setUpModule():
@@ -117,14 +117,14 @@ class FilmGateTests(unittest.TestCase):
         self.assertIsNone(res['explain']['fix'])
 
     def test_smooth_push_is_not_red(self):
-        # 0.9 秒缓推 25% 不用改成快推也能过门：门禁量的是运动量，不是速度
+        # Повільне наближення на 25% за 0.9 секунди проходить перевірку без прискорення: вимірюється обсяг руху, а не швидкість.
         code, res = gate(W['smooth'] / 'smooth.mp4')
         self.assertEqual(code, 0, res['explain'])
         self.assertNotEqual(res['gate_light'], 'red')
         self.assertGreaterEqual(res['fast_ratio'], 0.035)
 
     def test_short_clip_only_warns(self):
-        # 短于 20 秒的片段读数没标定过：同一支慢推片默认只亮黄灯、不拦
+        # Показники фрагментів коротших за 20 секунд не калібровані: той самий ролик із повільним наближенням типово дає лише жовтий сигнал, без блокування.
         env = dict(os.environ, FILM_GATE_MIN_S='20')
         r = subprocess.run(['uv', 'run', '--quiet', str(SCRIPTS / 'film_gate.py'), str(W['slow'] / 'slow.mp4'), '--no-template'],
                            capture_output=True, text=True, timeout=900, env=env)
@@ -162,15 +162,15 @@ class DeliverTests(unittest.TestCase):
         self.assertTrue((out / 'punch.mp4').is_file())
         doc = (out / '交付说明.md').read_text()
         self.assertIn('没派审片', doc)
-        self.assertIn('没跑', doc)                       # 没跑 qa
+        self.assertIn('没跑', doc)                       # qa не запускався.
         self.assertIn('960×540', doc)
         self.assertIn(f'{SHOT * len(IMAGES):.2f}s', doc)
         self.assertIn('快速运动帧占比', doc)
         self.assertEqual(run(SCRIPTS / 'deliver.py', '--verify', out / '交付说明.md').returncode, 0)
-        # 改了事实段 → verify 报出来
+        # Змінено розділ фактів → verify повідомляє.
         (out / '交付说明.md').write_text(doc.replace('没派审片', '已通过独立审片'))
         self.assertNotEqual(run(SCRIPTS / 'deliver.py', '--verify', out / '交付说明.md').returncode, 0)
-        # 只在制作说明段补主观描述 → verify 仍然通过
+        # Додано лише суб’єктивний опис у розділ виробничих приміток → verify досі проходить.
         (out / '交付说明.md').write_text(doc + '\n补充：节奏按口播停顿。\n')
         self.assertEqual(run(SCRIPTS / 'deliver.py', '--verify', out / '交付说明.md').returncode, 0)
 
@@ -213,7 +213,7 @@ class QaCameraEventTests(unittest.TestCase):
             self.assertEqual(len(s['camera_events_lt']), 1, s)
             t0, t1 = s['camera_events_lt'][0]
             self.assertLessEqual(t1 - t0, 0.35 + 2 / 30)
-            self.assertTrue(t0 <= 1.5 and t1 >= 1.2, s)                 # 落在快推那 0.3 秒上
+            self.assertTrue(t0 <= 1.5 and t1 >= 1.2, s)                 # Потрапляє в 0.3 секунди швидкого наближення.
 
     def test_single_frame_flash_is_still_spike(self):
         s = self.segs['flash']

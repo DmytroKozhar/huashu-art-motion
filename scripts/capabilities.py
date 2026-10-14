@@ -54,7 +54,7 @@ def merge(base, patch):
 
 
 def validate(data, schema=None, where='config'):
-    # 本包schema只使用以下JSON Schema关键字；不声称实现通用schema解释器。
+    # Схеми цього пакета використовують лише наведені ключові слова JSON Schema; це не універсальний інтерпретатор схем.
     schema = schema or read_json(ROOT / 'schemas/media.schema.json')
     types = {'object': dict, 'string': str, 'integer': int, 'boolean': bool}
     typ = schema.get('type')
@@ -120,7 +120,7 @@ def effective(explicit=None, project=None):
 def locked(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_name(path.name + '.lock')
-    # 内核文件锁在进程退出后释放；不通过删除锁文件争抢所有权。
+    # Файлове блокування ядра звільняється після завершення процесу; не змагаємося за володіння видаленням файла блокування.
     with lock_path.open('a+b') as lock:
         if os.name == 'nt':
             import msvcrt
@@ -151,7 +151,7 @@ def save_patch(path, patch, expected=None, reset=None):
             raise ConfigError('配置已被其他进程修改；请重读后重试')
         updated = merge(old, patch)
         if reset:
-            # 只允许重置公开字段；不执行动态路径表达式。
+            # Дозволено скидати лише відкриті поля; динамічні вирази шляхів не виконуються.
             keys = reset.split('.')
             if keys[0] not in {'preferences', 'policy', 'bindings', 'provider_options', 'onboarding'}:
                 raise ConfigError('不支持这个reset路径')
@@ -199,7 +199,7 @@ def speaker(config, explicit=None):
     if voice and voice.get('speaker_id'):
         return voice['speaker_id']
     if explicit and not voice:
-        # 兼容旧命令的注册表别名或平台ID。
+        # Сумісність із псевдонімами реєстру або ID платформи старих команд.
         voice = {'entry': explicit}
     voice = voice or {'entry': 'default'}
     registry_path = Path(voice.get('registry_file') or config['bindings']['volcengine']['registry_file']).expanduser()
@@ -278,7 +278,7 @@ def inspect_audio(path):
 def system_voice_for(text, configured=None):
     if configured:
         return configured
-    # macOS默认英文音色可能对中文返回近空音频；只从已安装音色选，不下载。
+    # Типовий англійський голос macOS може повертати майже порожнє аудіо для китайської; обираємо лише серед установлених голосів, нічого не завантажуємо.
     if re.search(r"[\u4e00-\u9fff]", text):
         result = subprocess.run(['say', '-v', '?'], capture_output=True, text=True, check=True)
         names = [m.group(1).strip() for line in result.stdout.splitlines()
@@ -308,7 +308,7 @@ def run_say(args, config):
     requested_format = args.format
     out.parent.mkdir(parents=True, exist_ok=True)
     import koubo
-    # 临时工作区防止失败或半段响应污染最终产物。
+    # Тимчасова робоча область не дає збоям чи неповним відповідям зіпсувати кінцевий результат.
     with tempfile.TemporaryDirectory(prefix='voice-', dir=out.parent) as temp:
         staged = Path(temp) / (out.name + '.wav' if requested_format == 'pcm' else out.name)
         if result['mode'] == 'system':
@@ -332,7 +332,7 @@ def run_say(args, config):
             koubo.configure_backend(config)
             args = copy.copy(args)
             args.out = str(staged)
-            # 先用容器音频完成拟合/电平/终止状态验收，再导出裸PCM。
+            # Спершу перевіряємо відповідність тривалості, рівень і стан завершення аудіо в контейнері, потім експортуємо сирий PCM.
             if requested_format == 'pcm': args.format = 'wav'
             args.voice = speaker(config, args.voice)
             opts = config['provider_options']['volcengine']
@@ -345,7 +345,7 @@ def run_say(args, config):
         if artifact['duration'] < 0.12 or volume is None or volume < -60:
             raise ConfigError('合成音频近空或无有效声音，不作为成功产物')
         if args.fit and abs(artifact['duration'] - args.fit) > .05:
-            # 保留诊断候选，但不把它当成合格的最终输出。
+            # Зберігаємо діагностичний кандидат, але не вважаємо його придатним кінцевим результатом.
             candidate = out.with_name(out.stem + '.unfitted' + out.suffix)
             if not candidate.exists():
                 shutil.copy2(staged, candidate)
@@ -370,7 +370,7 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] in ('image-status', 'image-plan', 'accept-image', 'use-image'):
         import images
         return images.main()
-    # 生成/训练命令共用原CLI，避免两套参数漂移。
+    # Команди генерації/навчання використовують початковий CLI, щоб два набори параметрів не розходилися.
     if len(sys.argv) > 1 and sys.argv[1] in ('say', 'train', 'voices'):
         import koubo
         return koubo.main()

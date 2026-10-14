@@ -1,26 +1,26 @@
-// 渲染器与光影：网点、点彩、赛璐珞、漫画阴影、体积、长影子、双版本光影、光照图、皮影皮件、手剪位移。全部挂在 PAINT（P）上。
-// 来源：迁移测试 B（构成主义/达利/霍珀/吉卜力）、C（Kirby/修拉/马蒂斯）、D（伦勃朗/皮影/新海诚）。
-//   P.halftoneGray(c, src, bx,by,bw,bh, cell, col, gain, ang)  灰度照片网点：45° 网格、点径 ∝ √暗度、全部点并成一条 path 一次填（照片拼贴）
-//   P.shadeDots(c, path, bx,by,bw,bh, cell, col, f)           路径内按函数 f(x,y)∈0..1 落网点（网点阴影）
-//   P.dotPattern(c, key, pitch, r, col, bg, angleDeg)          本戴点 createPattern，带网屏角（四色印刷 C15° M75° Y0° K45°）
-//   P.pointillism(c, src, opt)                                 修拉点彩＝视觉混色：等大点、纯色板两两并置逼近目标色（P.dabs 是印象派，不是点彩）
-//   P.clipBeside(c, path, dx, dy)                              clip 到「path 减去平移后的自身」——赛璐珞阴影带、Kirby 黑块、亮边的公共底
-//   P.cel(c, p, base, shade, rim, opt)                         赛璐珞两调＋边缘光（新海诚、吉卜力角色）
-//   P.kirbyShade(g, path, opt)                                 Kirby 黑块阴影（spotted blacks）＋羽化排线（feathering）
-//   P.vol(c, path, x0,y0,x1,y1, a, b, occl, blur)              体积填色：线性渐变＋路径内模糊暗边（学院派，无勾线）
-//   P.castShadow(c, layers, opt)                               剪切仿射长影子：剪影投到地面（达利的长影子、黄昏）
-//   P.litClip(c, polys, drawLit)                               双版本光影裁切：背光版先画好，光斑多边形里画受光版（霍珀的硬光块）
-//   P.pool / P.lightMap / P.applyLight                         光照图整幅相乘：环境光打底＋lighter 叠光池＋multiply（伦勃朗、烛光、夜景）
-//   P.carve / P.piece / P.stamp                                皮影：皮件填色→镂空刻纹→补皮边→描边；印到幕布 = 软影＋multiply（剪影/镂空类风格）
-//   P.roughen(layer, box, opt)                                 整层低频像素位移：RIG 角色的边也像手剪的（马蒂斯）
-//   P.glowStroke(c, col, w, blur)                              霓虹灯管：对当前路径用 shadowBlur 描辉光（再描一道近白细芯线就是灯管）
+// Рендерери та світлотінь: растрові точки, пуантилізм, сел-шейдинг, коміксні тіні, об’єм, довгі тіні, двоверсійна світлотінь, карти освітлення, шкіряні деталі театру тіней, зміщення з ефектом ручного вирізання. Усе додається до PAINT (P).
+// Джерело: тести перенесення B (конструктивізм/Далі/Гоппер/Ґіблі), C (Kirby/Сера/Матісс), D (Рембрандт/театр тіней/Макото Сінкай).
+//   P.halftoneGray(c, src, bx,by,bw,bh, cell, col, gain, ang)  Растрування чорно-білого фото: сітка 45°, діаметр точки ∝ √темноти, всі точки об’єднуються в один path і заливаються разом (фотоколаж)
+//   P.shadeDots(c, path, bx,by,bw,bh, cell, col, f)           Растрові точки всередині контуру за функцією f(x,y)∈0..1 (растрова тінь)
+//   P.dotPattern(c, key, pitch, r, col, bg, angleDeg)          createPattern із точок Бен-Дея з кутом растру (чотириколірний друк C15° M75° Y0° K45°)
+//   P.pointillism(c, src, opt)                                 Пуантилізм Сера = оптичне змішування: однакові точки, попарне сусідство чистих кольорів палітри наближає цільовий колір (P.dabs — імпресіонізм, а не пуантилізм)
+//   P.clipBeside(c, path, dx, dy)                              clip до «path мінус його зміщена копія»: спільна основа для смуг сел-тіні, чорних плям Kirby і світлих країв
+//   P.cel(c, p, base, shade, rim, opt)                         Двотоновий сел-шейдинг + контрове світло (Макото Сінкай, персонажі Ґіблі)
+//   P.kirbyShade(g, path, opt)                                 Чорні тіньові плями Kirby (spotted blacks) + звужені штрихи (feathering)
+//   P.vol(c, path, x0,y0,x1,y1, a, b, occl, blur)              Об’ємна заливка: лінійний градієнт + розмитий темний край усередині контуру (академічний живопис без обведення)
+//   P.castShadow(c, layers, opt)                               Довгі тіні через афінний скос: проєкція силуету на підлогу (довгі тіні Далі, сутінки)
+//   P.litClip(c, polys, drawLit)                               Двоверсійна світлотінь з обрізанням: спершу затінена версія, потім освітлена всередині багатокутників світлових плям (жорсткі світлові площини Гоппера)
+//   P.pool / P.lightMap / P.applyLight                         Множення всього кадру на карту освітлення: фонове світло + світлові плями через lighter + multiply (Рембрандт, свічки, нічні сцени)
+//   P.carve / P.piece / P.stamp                                Театр тіней: заливка шкіряної деталі → ажурний орнамент → відновлення шкіряного краю → обведення; відбиток на екрані = м’яка тінь + multiply (силуетні/ажурні стилі)
+//   P.roughen(layer, box, opt)                                 Низькочастотне зміщення пікселів усього шару: краї персонажа RIG теж виглядають вирізаними вручну (Матісс)
+//   P.glowStroke(c, col, w, blur)                              Неонова трубка: світіння поточного контуру через shadowBlur (додайте тонку майже білу серцевину, щоб утворити трубку)
 (() => {
 const TAU = Math.PI * 2;
-let W = 1920, H = 1080; U.onStage((w, h) => { W = w; H = h; });   // 画布尺寸跟 U.setStage 走（默认 1920×1080）
+let W = 1920, H = 1080; U.onStage((w, h) => { W = w; H = h; });   // Розміри полотна визначає U.setStage (типово 1920×1080)
 const P = window.PAINT;
 const { clamp, lerp, rng } = U;
 
-// ---------- 网点 ----------
+// ---------- Растрові точки ----------
 P.halftoneGray = (c, src, bx, by, bw, bh, cell, col, gain = 0.78, ang = Math.PI / 4) => {
   bx |= 0; by |= 0; bw |= 0; bh |= 0;
   const d = src.getContext('2d', { willReadFrequently: true }).getImageData(bx, by, bw, bh).data;
@@ -50,13 +50,13 @@ P.dotPattern = (c, key, pitch, r, col, bg, angleDeg = 45) => {
   return p;
 };
 
-// ---------- 点彩（修拉：视觉混色） ----------
-// 固定六角网格、点等大（pitch 10、rad 4.5、位置 ±1.2px 静态抖）；每个点从纯色板 pal 里挑一对 (i,j)：
-//   目标色投影到 Pj→Pi 上得连续比例 w（clamp .2–.8），距离加 0.004·|Pi−Pj|² 惩罚（别用黑白点混出灰），格子哈希 < w 选 i 否则 j。
-// 取色前给目标色加 ±colorJitter 哈希抖动——配对色分界变成交错的点，不出竖向色带（两个坑都踩过：偏好纯色→色带；连续比例→整列切换）。
-// compRate 的点换成补色 comp[idx]；光渗：和 (+14,+6) 处亮度差 >45 时，亮侧放 white 点、暗侧放 dark 点。
-// shimmer(x,y) 为真的区域按 fps 重掷哈希（水面波光）；flicker 比例的点按 fps 换成配对色（空气在颤，太低会被判「基本定格」）。
-// 色板要带淡色（和白混过的色），否则亮墙被拆成白＋肤色＋零星蓝点，像雪花噪声。约 2.4 万点、每色一条 Path2D 一次 fill，每帧约 100ms。
+// ---------- Пуантилізм (Сера: оптичне змішування) ----------
+// Фіксована шестикутна сітка, однакові точки (pitch 10, rad 4.5, статичне зміщення позиції ±1.2px); для кожної точки вибирається пара (i,j) із палітри чистих кольорів pal:
+//   Проєкція цільового кольору на Pj→Pi дає неперервну частку w (clamp .2–.8); до відстані додається штраф 0.004·|Pi−Pj|² (щоб не змішувати сірий із чорних і білих точок); хеш комірки < w вибирає i, інакше j.
+// Перед вибором кольору додати до цільового кольору хешоване зміщення ±colorJitter: межі пар кольорів стають перемежованими точками без вертикальних смуг (обидві пастки вже траплялися: перевага чистих кольорів → смуги; неперервна частка → перемикання цілих стовпців).
+// Частка compRate точок замінюється додатковим кольором comp[idx]; світлова іррадіація: якщо різниця яскравості з точкою (+14,+6) >45, на світлому боці ставиться точка white, на темному — dark.
+// У зонах, де shimmer(x,y) істинне, хеш переобчислюється з частотою fps (відблиски на воді); частка flicker точок із частотою fps змінюється на парний колір (тремтіння повітря; надто мала частка виглядає майже як стоп-кадр).
+// Палітра має містити світлі кольори (з домішкою білого), інакше світла стіна розкладається на білий + тілесний + поодинокі сині точки, що нагадує сніговий шум. Приблизно 24 тисячі точок, один Path2D і один fill на колір, близько 100ms на кадр.
 const pointCache = new WeakMap();
 P.pointillism = (c, src, { pal, comp = {}, pitch = 10, rad = 4.5, posJitter = 2.4, colorJitter = 40, compRate = 0.08, flicker = 0.07, fps = 6, t = 0, shimmer, white = 12, dark = 0, bleed = 45 } = {}) => {
   const PAL = pal.map(v => typeof v === 'string' ? P.hex(v) : v);
@@ -93,12 +93,12 @@ P.pointillism = (c, src, { pal, comp = {}, pitch = 10, rad = 4.5, posJitter = 2.
   paths.forEach((p, k) => { c.fillStyle = P.rgb(PAL[k]); c.fill(p); });
 };
 
-// ---------- 赛璐珞 / 漫画阴影 ----------
-let BIG; U.onStage((w, h) => { BIG = new Path2D(); BIG.rect(-60, -60, w + 120, h + 120); });   // 比画布四边各大 60px 的矩形，跟画布尺寸走
-// clip 到 path ∩ ¬translate(path, dx, dy)：沿 (dx,dy) 方向的那一侧之外留下一条带（光从 -(dx,dy) 来时就是背光侧的阴影带）
+// ---------- Сел-шейдинг / коміксні тіні ----------
+let BIG; U.onStage((w, h) => { BIG = new Path2D(); BIG.rect(-60, -60, w + 120, h + 120); });   // Прямокутник, на 60px більший за полотно з кожного боку; розміри залежать від полотна
+// clip до path ∩ ¬translate(path, dx, dy): залишає смугу за межами сторони в напрямку (dx,dy) (за світла з -(dx,dy) це смуга тіні на неосвітленому боці)
 P.clipBeside = (c, path, dx, dy) => { const m = new Path2D(); m.addPath(BIG); m.addPath(path, new DOMMatrix().translate(dx, dy)); c.clip(path); c.clip(m, 'evenodd'); };
-// 底色 → 背光侧硬阴影带（宽 sd，光方向 (lx,ly) 指向光源的反方向：lx=-1 光从左来、阴影在右）→ 受光侧亮边（宽 rw）→ 细描线。
-// 按部件顺序逐个 cel，遮挡天然正确，不需要 visibleLines。逆光（窗下的猫）：lx/ly 取反并另加 lighter 暖色亮边。
+// Базовий колір → жорстка смуга тіні на неосвітленому боці (ширина sd, напрямок світла (lx,ly) спрямований від джерела: lx=-1 означає світло зліва й тінь справа) → світлий край освітленого боку (ширина rw) → тонке обведення.
+// Застосовувати cel до деталей у порядку малювання: перекриття одразу правильні, visibleLines не потрібні. Для контрового світла (кіт під вікном) змінити знаки lx/ly й додати теплий світлий край через lighter.
 P.cel = (c, p, base, shade, rim, { sd = 22, rw = 7, line = '#6a4632', lw = 2.2, lx = -1, ly = -0.55 } = {}) => {
   if (!p) return;
   c.fillStyle = base; c.fill(p);
@@ -106,7 +106,7 @@ P.cel = (c, p, base, shade, rim, { sd = 22, rw = 7, line = '#6a4632', lw = 2.2, 
   if (rim) { c.save(); P.clipBeside(c, p, -lx * rw, -ly * rw); c.fillStyle = rim; c.fill(p); c.restore(); }
   if (lw) { c.strokeStyle = line; c.lineWidth = lw; c.lineJoin = 'round'; c.stroke(p); }
 };
-// Kirby：light 指向光源（默认左上），黑块 = path ∩ ¬shift(d1)，羽化带 = path ∩ ¬shift(d2) 里沿光方向的平行线（间距 gap）
+// Kirby: light спрямований до джерела світла (типово вліво вгору), чорні плями = path ∩ ¬shift(d1), зона штрихування = паралельні лінії вздовж світла всередині path ∩ ¬shift(d2) (крок gap)
 P.kirbyShade = (g, path, { d1 = 14, d2 = 30, gap = 9, light = [-0.86, -0.5], ink = '#141212', lw = 2.6 } = {}) => {
   g.save(); P.clipBeside(g, path, light[0] * d2, light[1] * d2);
   g.strokeStyle = ink; g.lineWidth = lw; g.lineCap = 'butt'; g.beginPath();
@@ -116,39 +116,39 @@ P.kirbyShade = (g, path, { d1 = 14, d2 = 30, gap = 9, light = [-0.86, -0.5], ink
   g.save(); P.clipBeside(g, path, light[0] * d1, light[1] * d1); g.fillStyle = ink; g.fillRect(0, 0, W, H); g.restore();
 };
 
-// ---------- 体积 / 影子 / 光 ----------
+// ---------- Об’єм / тіні / світло ----------
 P.vol = (c, path, x0, y0, x1, y1, a, b, occl = 'rgba(40,20,10,.45)', blur = 14) => {
   const g = c.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, a); g.addColorStop(1, b);
   c.fillStyle = g; c.fill(path);
   if (occl) { c.save(); c.clip(path); c.shadowColor = occl; c.shadowBlur = blur; c.strokeStyle = occl; c.lineWidth = blur * 0.6; c.stroke(path); c.restore(); }
 };
-// layers: [[yg, g => { 在 g 上用黑色画这一组物体的剪影 }], ...]，yg 是这组物体的着地线。
-// 剪切仿射 y' = yg − ky·(yg − y)、x' = x − kx·(y' 方向的高度)，影子往右后方躺（太阳在左前方低空）；kx 变大 = 影子变长（黄昏）。
-// 所有剪影先画进一张离屏（纯黑）再整体以 alpha 叠，重叠处不会加深；clipY 以下才是地面。坑：ky>0 往观众方向投会被画框底边吃掉。
+// layers: [[yg, g => { намалювати на g чорний силует цієї групи об’єктів }], ...], де yg — лінія опори цієї групи на землю.
+// Афінний скос y' = yg − ky·(yg − y), x' = x − kx·(висота вздовж y'): тінь лягає назад і вправо (низьке сонце спереду зліва); більше kx = довша тінь (сутінки).
+// Спершу намалювати всі силуети на одному позаекранному полотні (чистим чорним), потім накласти разом з alpha, щоб перетини не темнішали; земля починається нижче clipY. Пастка: при ky>0 тіні в бік глядача обрізаються нижнім краєм кадру.
 P.castShadow = (c, layers, { kx = 1, ky = 0.22, clipY = 0, alpha = 0.55, blur = 1.5, key = 'castShadow' } = {}) => {
   const S = P.scratch(key), g = S.getContext('2d'); g.reset(); g.clearRect(0, 0, W, H); g.fillStyle = '#000'; g.strokeStyle = '#000';
   for (const [yg, fn] of layers) { g.setTransform(1, 0, -kx, ky, kx * yg, yg * (1 - ky)); fn(g); }
   g.setTransform(1, 0, 0, 1, 0, 0);
   c.save(); c.beginPath(); c.rect(0, clipY, W, H); c.clip(); c.globalAlpha = alpha; if (blur) c.filter = `blur(${blur}px)`; c.drawImage(S, 0, 0); c.restore();
 };
-// 双版本光影裁切：先把整幅画成背光版，再 clip 到光斑多边形（可多个、可每帧平移）画受光版 → 光影边缘是硬的、能整体移动。
-// 人物同理：drawLit 里用受光色再画一遍。人在墙上的投影＝剪影平移后 source-in 背光版，再画回光斑里。
+// Двоверсійна світлотінь з обрізанням: спершу намалювати весь кадр затіненим, потім clip до багатокутників світлових плям (може бути кілька, з покадровим зміщенням) і намалювати освітлену версію → жорсткі межі світлотіні, які можна рухати разом.
+// Так само для персонажів: у drawLit перемалювати освітленими кольорами. Тінь людини на стіні = зміщений силует із затіненою версією через source-in, потім повернути у світлову пляму.
 P.litClip = (c, polys, drawLit) => {
   c.save(); c.beginPath(); polys.forEach(pp => { pp.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.closePath(); }); c.clip(); drawLit(c); c.restore();
 };
-// 光池：径向渐变的一团光（col 为 'r,g,b' 字符串）
+// Світлова пляма: згусток світла з радіальним градієнтом (col — рядок 'r,g,b')
 P.pool = (g, x, y, r, col, a) => { const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, `rgba(${col},${a})`); rg.addColorStop(0.45, `rgba(${col},${a * 0.55})`); rg.addColorStop(1, `rgba(${col},0)`); g.fillStyle = rg; g.fillRect(x - r, y - r, 2 * r, 2 * r); };
-// 光照图：ambient 打底（环境光，伦勃朗约 rgb(30,21,13) = 0.13），fn(g) 里用 P.pool 叠光池（已是 lighter），返回画布
+// Карта освітлення: основа ambient (фонове світло, для Рембрандта приблизно rgb(30,21,13) = 0.13), у fn(g) накласти плями P.pool (уже lighter); повертає полотно
 P.lightMap = (key, ambient, fn) => {
   const S = P.scratch('light_' + key), g = S.getContext('2d'); g.reset();
   g.fillStyle = ambient; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'lighter'; fn(g); g.globalCompositeOperation = 'source-over';
   return S;
 };
-// 整幅乘光：亮态底稿 × 光照图。所有明暗法、烛光、夜景都这么做——比逐个物体画明暗统一得多。
+// Множення всього кадру на світло: освітлене базове зображення × карта освітлення. Так робляться всі світлотіньові, свічкові й нічні сцени; результат значно цілісніший, ніж окреме освітлення кожного об’єкта.
 P.applyLight = (c, map) => { c.save(); c.globalCompositeOperation = 'multiply'; c.drawImage(map, 0, 0); c.restore(); };
 
-// ---------- 皮影 / 镂空 ----------
-// 刻纹库（在 clip 内用 destination-out 画）：dots 鱼子纹、flowers 团花、clouds 云纹、lattice 方格、lines 刻线
+// ---------- Театр тіней / ажур ----------
+// Бібліотека різьблених орнаментів (малюються в межах clip через destination-out): dots — зернистий візерунок, flowers — квіткові розетки, clouds — хмарний орнамент, lattice — квадратна решітка, lines — прорізані лінії
 P.carve = {
   dots(g, x0, y0, x1, y1, s = 18, r = 3.2) { for (let y = y0; y < y1; y += s) for (let x = x0 + ((y / s | 0) % 2) * s / 2; x < x1; x += s) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); } },
   flowers(g, x0, y0, x1, y1, s = 46, r = 5) { for (let y = y0; y < y1; y += s) for (let x = x0 + ((y / s | 0) % 2) * s / 2; x < x1; x += s) { for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 1.5, y + Math.sin(a) * r * 1.5, r, r * 0.6, a, 0, 7); g.fill(); } } },
@@ -156,25 +156,25 @@ P.carve = {
   lattice(g, x0, y0, x1, y1, s = 26, w = 12) { for (let y = y0; y < y1; y += s) for (let x = x0; x < x1; x += s) g.fillRect(x + (s - w) / 2, y + (s - w) / 2, w, w); },
   lines(g, segs, w = 3.2) { g.lineWidth = w; g.lineCap = 'round'; segs.forEach(sg => { g.beginPath(); sg.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.stroke(); }); },
 };
-// 一块皮件：填色 → carve(g) 在 clip 内镂空 → 补 edge 宽的同色皮边（刻纹不刻穿外轮廓）→ 深色描边。
-// 白色部位（猫的白胸白爪）直接整块镂空只留皮边——所有剪影/镂空类风格都适用。
+// Одна шкіряна деталь: заливка → ажурне вирізання carve(g) в межах clip → відновлення краю того самого кольору завширшки edge (орнамент не прорізає зовнішній контур) → темне обведення.
+// Білі частини (білі груди й лапи кота) повністю вирізаються, лишаючи тільки шкіряний край; це підходить усім силуетним/ажурним стилям.
 P.piece = (g, path, col, carve, { edge = 5, line = '#3a160a', lw = 2.6 } = {}) => {
   g.save(); g.fillStyle = col; g.fill(path);
   if (carve) { g.save(); g.clip(path); g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.strokeStyle = '#000'; carve(g); g.restore(); }
   g.strokeStyle = col; g.lineWidth = edge * 2; g.lineJoin = 'round'; g.save(); g.clip(path); g.stroke(path); g.restore();
   g.strokeStyle = line; g.lineWidth = lw; g.stroke(path); g.restore();
 };
-// 把一层皮件印到幕布上：先 multiply 一层偏移软影（皮件没贴紧幕布的虚影），再 multiply 本体（透光 = 幕布色 × 皮色，重叠处自然变深）
+// Відбиток шару шкіряних деталей на екрані: спершу multiply зі зміщеною м’якою тінню (розмита тінь деталей, які не прилягають до екрана), потім multiply самого шару (просвічування = колір екрана × колір шкіри, перетини природно темнішають)
 P.stamp = (c, layer, { dx = 7, dy = 5, shadow = 0.28, blur = 6 } = {}) => {
   c.save(); c.globalCompositeOperation = 'multiply'; c.globalAlpha = shadow; c.filter = `blur(${blur}px)`; c.drawImage(layer, dx, dy); c.restore();
   c.save(); c.globalCompositeOperation = 'multiply'; c.drawImage(layer, 0, 0); c.restore();
 };
 
-// ---------- 霓虹 ----------
+// ---------- Неон ----------
 P.glowStroke = (c, col, w, blur) => { c.shadowColor = col; c.shadowBlur = blur; c.strokeStyle = col; c.lineWidth = w; c.stroke(); c.shadowBlur = 0; };
 
-// ---------- 手剪位移 ----------
-// 对 layer 的 box=[x0,y0,x1,y1] 区域做静态低频位移（fbm 频率 freq、幅度 amp px）：RIG 角色不给剪刀折线时，整层边缘也像手剪的。约 15ms。
+// ---------- Зміщення ручного вирізання ----------
+// Статичне низькочастотне зміщення області box=[x0,y0,x1,y1] шару layer (частота fbm freq, амплітуда amp px): навіть без ламаних «ножичних» контурів персонажа RIG краї всього шару виглядають вирізаними вручну. Приблизно 15ms.
 const fields = {};
 P.roughen = (layer, box, { freq = 0.028, amp = 9, key = 'rough' } = {}) => {
   const [X0, Y0, X1, Y1] = box, w = X1 - X0, h = Y1 - Y0, fk = `${key}|${box}|${freq}|${amp}`;

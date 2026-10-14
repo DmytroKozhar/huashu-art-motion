@@ -14,9 +14,9 @@ meta_p = out / 'sprites.json'; meta = json.loads(meta_p.read_text()) if meta_p.e
 for f in a.files:
     im = np.asarray(Image.open(f).convert('RGB')).astype(np.float32)
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
-    spill = g - np.maximum(r, b)                      # 绿色占优程度
+    spill = g - np.maximum(r, b)                      # Ступінь переважання зеленого
     alpha = 1 - np.clip((spill - a.soft) / (a.hard - a.soft), 0, 1)
-    # 去绿溢：半透明及边缘像素的绿通道压到 max(r,b)
+    # Усунення зеленого відблиску: зелений канал напівпрозорих і крайових пікселів обмежуємо max(r,b).
     g2 = np.where(spill > 0, np.minimum(g, np.maximum(r, b) + 0.25 * np.clip(spill, 0, 30)), g)
     rgba = np.dstack([r, g2, b, alpha * 255]).clip(0, 255).astype(np.uint8)
     ys, xs = np.where(alpha > 0.05)

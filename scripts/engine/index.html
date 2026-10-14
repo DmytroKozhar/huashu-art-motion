@@ -18,7 +18,7 @@ body.render #ui{display:none}
 <script src="lib/rig.js"></script>
 <script src="lib/rig_huashu.js"></script>
 <script src="lib/kit.js"></script>
-<!-- YouTube 解说语法库（references/09）：动效时间、相机、图解形变、文字、图表、发布会界面、拼贴、卡通 -->
+<!-- Бібліотека прийомів для пояснювальних YouTube-відео (references/09): таймінг анімації, камера, перетворення діаграм, текст, графіки, презентаційні інтерфейси, колажі, мультфільми -->
 <script src="lib/motion.js"></script>
 <script src="lib/camera.js"></script>
 <script src="lib/diagram.js"></script>
@@ -29,8 +29,8 @@ body.render #ui{display:none}
 <script src="lib/media.js"></script>
 <script src="lib/toon.js"></script>
 <script>
-// 选片子：默认 eras.js；?film=<名> → eras_<名>.js（如 ?film=gallery = 35 种风格样片）；?film=demos/<名> → demos/<名>/eras.js（8 种 YouTube 语法示范）。
-// render.py / qa.py 用 --film 传。
+// Вибір фільму: типово eras.js; ?film=<назва> → eras_<назва>.js (наприклад, ?film=gallery — зразки 35 стилів); ?film=demos/<назва> → demos/<назва>/eras.js (демонстрації 8 прийомів для YouTube).
+// render.py / qa.py передають назву через --film.
 (() => { const f = new URLSearchParams(location.search).get('film');
   const src = f && /^demos\/[a-z0-9_]+$/.test(f) ? `${f}/eras.js` : f && /^[a-z0-9_]+$/.test(f) ? `eras_${f}.js` : 'eras.js';
   document.write(`<script src="${src}"><\/script>`); })();

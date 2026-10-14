@@ -73,7 +73,7 @@ def check(repo,ref,base=None,email=None):
     if ref!='INDEX':
         revision=base+'..'+ref if base and set(base)!={'0'} else ref
         commits=git(repo,'rev-list',revision).decode().splitlines()
-        # 每个待发提交都扫描，防止先提交秘密再删除后仅检查HEAD。
+        # Скануємо кожен коміт, призначений до публікації, щоб перевірка лише HEAD не пропустила секрет, доданий і потім видалений.
         for commit in commits:
             raw=git(repo,'cat-file','commit',commit)
             if SECRET.search(raw):raise ValueError('提交元数据/说明含私人路径或凭据形态：'+commit[:12])
